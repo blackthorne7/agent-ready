@@ -17,6 +17,7 @@ Three directions to choose from, side by side on one canvas: https://claude.ai/a
 ## Use it
 
 - **Web:** `/report?url=example.com` (server-rendered, works without JavaScript)
+- **Leaderboard:** `/leaderboard`, filter by `?type=restaurant` and `?place=Austin|TX|US`
 - **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }`
 - **MCP server:** `/api/mcp` (streamable HTTP), tools `audit_site` and `generate_fixes`
 
@@ -42,7 +43,7 @@ AGENT_STUB=1 pnpm agent https://example.com "find pricing"   # fake steps, no mo
 pnpm agent https://example.com "book a demo"                 # needs ANTHROPIC_API_KEY
 ```
 
-Env vars are listed in `.env.example`. Supabase tables: `lib/agent/schema.sql`. `lib/page.ts` is still a stub serving a fake site.
+Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (audits, fix links, leaderboard) and `lib/agent/schema.sql` (agent runs). Every audit from the web, API or MCP is saved when `SUPABASE_SERVICE_ROLE_KEY` is set. `lib/page.ts` is still a stub serving a fake site.
 
 ## Deploy (Unikraft Cloud)
 
