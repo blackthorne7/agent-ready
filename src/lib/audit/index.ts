@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { detectBusiness } from "./business";
 import { botChallenge, checks, collectDiagnostics } from "./checks";
 import { assertPublicUrl, safeFetch } from "./fetch";
 import { CATEGORIES, CATEGORY_ORDER, MIN_CATEGORY_COVERAGE, RUBRIC_VERSION } from "./rubric";
@@ -110,6 +111,7 @@ export async function runAudit(input: string, { tasks = [] }: AuditOptions = {})
       CATEGORY_ORDER.map((c) => [c, { label: CATEGORIES[c].label, weight: CATEGORIES[c].weight, score: null, coverage: 0, countedInTotal: false }]),
     ) as Record<Category, CategoryScore>,
     checks: [],
+    business: {},
     tasks,
     diagnostics: [],
     error,
@@ -159,6 +161,7 @@ export async function runAudit(input: string, { tasks = [] }: AuditOptions = {})
     taskSuccessRate: scoredTasks.length ? scoredTasks.filter((t) => t.status === "success").length / scoredTasks.length : null,
     categories,
     checks: results,
+    business: detectBusiness(ctx),
     tasks,
     diagnostics: collectDiagnostics(ctx),
   };

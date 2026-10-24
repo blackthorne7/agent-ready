@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { CATEGORY_ORDER, runAudit, type Category, type CheckResult } from "@/lib/audit";
+import { saveAudit } from "@/lib/audit/save";
 import { AuditForm } from "../audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow, TONE, toneFor, type Tone } from "../ui";
 import { AgentSection } from "./agent-section";
@@ -44,6 +45,7 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
 export default async function ReportPage({ searchParams }: Props) {
   const { url } = await searchParams;
   const report = url ? await runAudit(url) : null;
+  if (report) await saveAudit(report);
   const cookies = report?.checks.filter((c) => c.group === "cookies") ?? [];
 
   return (

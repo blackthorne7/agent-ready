@@ -99,6 +99,16 @@ export interface Diagnostic {
   detail: string;
 }
 
+/** Who the site belongs to, read from its JSON-LD. Feeds the leaderboard filters. */
+export interface BusinessInfo {
+  name?: string;
+  /** A business_types slug in supabase/schema.sql, e.g. "restaurant". */
+  businessType?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+}
+
 export interface Report {
   url: string;
   auditedAt: string;
@@ -114,6 +124,7 @@ export interface Report {
   taskSuccessRate: number | null;
   categories: Record<Category, CategoryScore>;
   checks: CheckResult[];
+  business: BusinessInfo;
   tasks: TaskRun[];
   /** Browser behaviors recorded but not scored. */
   diagnostics: Diagnostic[];

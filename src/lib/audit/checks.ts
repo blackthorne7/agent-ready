@@ -20,7 +20,7 @@ const AI_AGENTS = [
 ];
 
 /** Every JSON-LD node on the page, including nested and @graph children. */
-function allNodes(ctx: AuditContext): Record<string, unknown>[] {
+export function allNodes(ctx: AuditContext): Record<string, unknown>[] {
   const out: Record<string, unknown>[] = [];
   const walk = (v: unknown) => {
     if (Array.isArray(v)) v.forEach(walk);
@@ -33,7 +33,7 @@ function allNodes(ctx: AuditContext): Record<string, unknown>[] {
   return out;
 }
 
-function typesOf(node: Record<string, unknown>): string[] {
+export function typesOf(node: Record<string, unknown>): string[] {
   const t = node["@type"];
   return (Array.isArray(t) ? t : [t]).filter((x): x is string => typeof x === "string");
 }
