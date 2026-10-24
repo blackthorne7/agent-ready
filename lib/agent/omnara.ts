@@ -98,6 +98,17 @@ export async function runOmnara(opts: {
     return null;
   };
 
+  // Leaving a `for await` waits for the SDK stream's cleanup, which under Next.js's patched fetch
+  // can hang indefinitely. So results found inside the loop are reported through `settled` straight
+  // away, and the loop is left to wind down on its own after the abort.
+  let settle!: (result: AgentResult) => void;
+  const settled = new Promise<AgentResult>((resolve) => (settle = resolve));
+  const end = (result: AgentResult) => {
+    settle(result);
+    controller.abort();
+    return result;
+  };
+
   const drive = async (): Promise<AgentResult> => {
     // Lifecycle updates aren't replayed, so pick up anything that became ready before we connected.
     let stop = await processReady();
@@ -124,12 +135,12 @@ export async function runOmnara(opts: {
 
         if (frame.content_blocks.some((b) => b.type === "tool_call")) {
           stop = await processReady();
-          if (stop) return stop;
+          if (stop) return end(stop);
           continue;
         }
         if (frame.stop_reason === "max_tokens") continue; // Omnara continues the turn itself
         if (frame.stop_reason !== "end_turn") {
-          return { status: "error", reason: `The model stopped with "${frame.stop_reason}" before reaching a verdict.` };
+          return end({ status: "error", reason: `The model stopped with "${frame.stop_reason}" before reaching a verdict.` });
         }
         // Turn ended without calling finish.
         if (!nudged) {
@@ -141,22 +152,22 @@ export async function runOmnara(opts: {
           });
           continue;
         }
-        return {
+        return end({
           status: "failed",
           reason: `Agent stopped without a verdict after ${guard.stepsUsed} steps. Last message: ${said || "(empty)"}`,
-        };
+        });
       }
 
       if ("tool_call_id" in frame && "state" in frame && frame.state === "ready") {
         stop = await processReady();
-        if (stop) return stop;
+        if (stop) return end(stop);
       }
     }
     throw new Error("Omnara event stream ended unexpectedly");
   };
 
   try {
-    return await withTimeout(drive(), Math.max(0, guard.remainingMs()), "Run");
+    return await withTimeout(Promise.race([drive(), settled]), Math.max(0, guard.remainingMs()), "Run");
   } finally {
     controller.abort();
     // Stop any in-flight turn and retire the agent; its timeline stays viewable by ID.
