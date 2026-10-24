@@ -41,6 +41,16 @@ export interface Check {
   run: (ctx: AuditContext) => Promise<Omit<CheckResult, "id" | "category" | "title" | "weight">>;
 }
 
+/** Who the site belongs to, read from its JSON-LD. Feeds the leaderboard filters. */
+export interface BusinessInfo {
+  name?: string;
+  /** A business_types slug in supabase/schema.sql, e.g. "restaurant". */
+  businessType?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+}
+
 export interface Report {
   url: string;
   auditedAt: string;
@@ -48,5 +58,6 @@ export interface Report {
   grade: string;
   categories: Record<Category, { score: number; label: string }>;
   checks: CheckResult[];
+  business: BusinessInfo;
   error?: string;
 }

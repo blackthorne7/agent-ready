@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { runAudit, type Category, type CheckResult } from "@/lib/audit";
+import { saveAudit } from "@/lib/audit/save";
 import { AuditForm } from "../audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow, TONE, toneFor, type Tone } from "../ui";
 
@@ -35,6 +36,7 @@ const CHECK_TONE: Record<CheckResult["status"], { tone: Tone; label: string }> =
 export default async function ReportPage({ searchParams }: Props) {
   const { url } = await searchParams;
   const report = url ? await runAudit(url) : null;
+  if (report) await saveAudit(report);
 
   return (
     <div className="text-[17px] leading-[1.55]">
