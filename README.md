@@ -17,6 +17,7 @@ Three directions to choose from, side by side on one canvas: https://claude.ai/a
 ## Use it
 
 - **Web:** `/report?url=example.com` (server-rendered, works without JavaScript)
+- **Leaderboard:** `/leaderboard`, filter by `?type=restaurant` (location filter paused)
 - **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }`
 - **MCP server:** `/api/mcp` (streamable HTTP), tools `audit_site` and `generate_fixes`
 
@@ -42,18 +43,34 @@ AGENT_STUB=1 pnpm agent https://example.com "find pricing"   # fake steps, no mo
 pnpm agent https://example.com "book a demo"                 # AGENT_RUNTIME=omnara: needs OMNARA_* vars
 ```
 
-With `AGENT_RUNTIME=omnara`, [Omnara](https://docs.omnara.com) runs the agent loop and model, and our tools (`lib/agent/tools.ts`) run as Omnara custom tools on our server. Each run logs a dashboard link. Without it, `lib/agent/model.ts` calls Claude directly (needs `ANTHROPIC_API_KEY`). Both share the guardrails in `lib/agent/guard.ts`.
+With `AGENT_RUNTIME=omnara`, [Omnara](https://docs.omnara.com) runs the agent loop and model, and our tools (`lib/agent/tools.ts`) run as Omnara custom tools on our server. Each run logs a dashboard link. Without it, `lib/agent/model.ts` calls Claude directly (needs `ANTHROPIC_API_KEY`). Both share the guardrails in `lib/agent/guard.ts`. The agent reads real pages through `lib/page.ts`; `AGENT_FAKE_SITE=1` swaps in the fake site in `lib/page-fake.ts`.
 
-Env vars are listed in `.env.example`. Supabase tables: `lib/agent/schema.sql`. `lib/page.ts` is still a stub serving a fake site.
+Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (audits, fix links, leaderboard) and `lib/agent/schema.sql` (agent runs). Every audit from the web, API or MCP is saved when `SUPABASE_SERVICE_ROLE_KEY` is set.
 
 ## Deploy (Unikraft Cloud)
 
 Requires Docker and `unikraft login`.
 
+Deploys attach to the existing `snowy-thunder-epw3bj03` service so the URL never changes. Supabase env is read from `.env` (it isn't baked into the image).
+
 ```bash
 unikraft build . --output agent-ready/agent-ready:latest
 unikraft instances delete agent-ready
-unikraft run --metro sfo --name agent-ready -m 1024M -p 443:3000/tls+http \
+set -a && . ./.env && set +a
+unikraft run --metro sfo --name agent-ready -m 1024M --set service=snowy-thunder-epw3bj03 \
   -e HOSTNAME=0.0.0.0 -e PORT=3000 -e NODE_ENV=production \
+  -e SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+  -e NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+  -e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+  -e SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
+  -e AGENT_RUNTIME=omnara \
+  -e OMNARA_TOKEN="$OMNARA_TOKEN" \
+  -e OMNARA_ORG_ID="$OMNARA_ORG_ID" \
+  -e OMNARA_PROJECT_ID="$OMNARA_PROJECT_ID" \
+  -e OMNARA_MODEL="${OMNARA_MODEL:-anthropic/claude-sonnet-5.5}" \
   --image agent-ready/agent-ready:latest
 ```
+
+`.env` must have both the Supabase vars and the `OMNARA_*` vars (see `.env.example`). Leaving the Omnara ones out deploys a site where the agent section fails. Instance env vars can't be added later with `-e` (that replaces the whole env); use `unikraft instances edit agent-ready --add runtime.env=KEY=value` instead.
+
+If `instances delete agent-ready` reports "not found", run `unikraft instances list` and delete whatever is on `snowy-thunder` by its UUID.

@@ -2,6 +2,7 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { runAudit } from "@/lib/audit";
 import { generateFixes } from "@/lib/audit/fixes";
+import { saveAudit } from "@/lib/audit/save";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ const handler = createMcpHandler(
       },
       async ({ url }) => {
         const report = await runAudit(url);
+        await saveAudit(report);
         return {
           content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
           structuredContent: report as unknown as Record<string, unknown>,

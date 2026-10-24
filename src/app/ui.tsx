@@ -14,27 +14,41 @@ export function toneFor(score: number): Tone {
   return "bad";
 }
 
-export function SiteHeader() {
+const NAV = [
+  { href: "/#score", label: "The score" },
+  { href: "/#steps", label: "How to fix" },
+  { href: "/leaderboard", label: "Leaderboard", key: "leaderboard" },
+] as const;
+
+/** On phones the links drop to their own row under the logo and button; from md up it's one row. */
+export function SiteHeader({ current }: { current?: "leaderboard" } = {}) {
   return (
     <header className="border-b border-border">
-      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 px-6 py-[18px]">
+      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-x-4 gap-y-3 px-6 py-[18px] md:gap-x-6">
         <Link href="/" className="flex items-center gap-2.5 font-display text-[22px] font-bold text-foreground no-underline">
           <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-base text-white">
             A
           </span>
           Agent Ready
         </Link>
-        <nav className="flex flex-wrap items-center gap-6">
-          <Link href="/#score" className="text-foreground no-underline hover:text-accent-text">
-            The score
-          </Link>
-          <Link href="/#steps" className="text-foreground no-underline hover:text-accent-text">
-            How to fix
-          </Link>
-          <Link href="/#check" className="rounded-[10px] bg-white px-[18px] py-2.5 font-semibold text-black no-underline">
-            Get my score
-          </Link>
+        <nav aria-label="Main" className="order-last flex w-full items-center gap-6 md:order-none md:ml-auto md:w-auto">
+          {NAV.map((item) => {
+            const active = "key" in item && item.key === current;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`no-underline hover:text-accent-text ${active ? "font-semibold text-accent-text" : "text-foreground"}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
+        <Link href="/#check" className="rounded-[10px] bg-white px-4 py-2.5 font-semibold text-black no-underline md:px-[18px]">
+          Get my score
+        </Link>
       </div>
     </header>
   );

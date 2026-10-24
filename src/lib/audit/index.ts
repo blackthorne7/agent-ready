@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { detectBusiness } from "./business";
 import { checks } from "./checks";
 import { assertPublicUrl, safeFetch } from "./fetch";
 import type { AuditContext, Category, CheckResult, Fetched, Report } from "./types";
@@ -56,6 +57,7 @@ export async function runAudit(input: string): Promise<Report> {
       act: { score: 0, label: CATEGORY_LABELS.act },
     },
     checks: [],
+    business: {},
     error,
   });
 
@@ -108,5 +110,6 @@ export async function runAudit(input: string): Promise<Report> {
       act: { score: byCat("act"), label: CATEGORY_LABELS.act },
     },
     checks: results,
+    business: detectBusiness(ctx),
   };
 }
