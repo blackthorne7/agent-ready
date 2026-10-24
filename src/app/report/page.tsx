@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { runAudit } from "@/lib/audit";
+import { logoUrl } from "@/lib/context-dev";
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader } from "../ui";
 import { ReportBody } from "./report-body";
@@ -71,7 +72,7 @@ export default async function ReportPage({ searchParams }: Props) {
                 .
               </p>
             </noscript>
-            <ReportBody checklistReport={{ ...report, score: report.score }} />
+            <ReportBody checklistReport={{ ...report, score: report.score }} logoSrc={logoUrl(new URL(report.url).hostname.replace(/^www\./, ""))} />
           </>
         )}
       </main>

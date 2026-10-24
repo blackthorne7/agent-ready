@@ -6,6 +6,7 @@ import { rankFixes, type FixItem } from "@/lib/audit/fix-plan";
 import { CATEGORY_ORDER } from "@/lib/audit/rubric";
 import type { CheckResult, Report } from "@/lib/audit/types";
 import type { AgentTaskRun } from "../../../lib/agent/tasks";
+import { SiteLogo } from "../site-logo";
 import { ScoreRing, TONE, toneFor, type Tone } from "../ui";
 import { AgentEvaluationProgress, type EvaluationStage } from "./AgentEvaluationProgress";
 import { AgentSteps, AgentStrip, useAgentRun } from "./agent-section";
@@ -95,7 +96,7 @@ function WorkingList({ checks }: { checks: CheckResult[] }) {
  * The scored part of the report. Shows one score: the final one, after the agent has tried the site
  * and /api/agent has re-scored and saved it. The progress card covers the wait.
  */
-export function ReportBody({ checklistReport }: { checklistReport: Report & { score: number } }) {
+export function ReportBody({ checklistReport, logoSrc = null }: { checklistReport: Report & { score: number }; logoSrc?: string | null }) {
   const [finalReport, setFinalReport] = useState<(Report & { score: number }) | null>(null);
   const agent = useAgentRun(checklistReport.url, (r) => r.score != null && setFinalReport(r as Report & { score: number }));
   // The fix link reads the saved final audit, which is stored under the final report's URL.
@@ -118,9 +119,12 @@ export function ReportBody({ checklistReport }: { checklistReport: Report & { sc
   return (
     <>
       <section className="flex flex-col gap-6">
-        <p className="text-[15px] text-muted">
-          Report for <strong className="text-foreground">{new URL(report.url).hostname}</strong> · checked{" "}
-          {new Date(report.auditedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[15px] text-muted">
+          <SiteLogo src={logoSrc} size={28} />
+          <span>
+            Report for <strong className="text-foreground">{new URL(report.url).hostname}</strong> · checked{" "}
+            {new Date(report.auditedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+          </span>
         </p>
         <div className="flex flex-wrap items-center gap-9 rounded-3xl border border-border bg-card p-7 sm:p-8">
           <ScoreRing score={report.score} caption={`Grade ${report.grade}`} />
