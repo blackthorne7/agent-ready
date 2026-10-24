@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buildFixPrompt, rankFixes, scoreIfFixed } from "@/lib/audit/fix-plan";
+import { logoUrl } from "@/lib/context-dev";
 import { getFixLink } from "@/lib/fix-links";
+import { SiteLogo } from "../../site-logo";
 import { ScoreRing, SiteFooter, SiteHeader, TONE, toneFor } from "../../ui";
 import { CopyButton } from "./copy-button";
 
@@ -41,7 +43,10 @@ export default async function FixPage({ params }: Props) {
         <section className="flex flex-wrap items-center gap-10 rounded-3xl border border-border bg-card p-8">
           <ScoreRing score={link.audit.score} caption={`Grade ${link.audit.grade} today`} />
           <div className="flex min-w-0 flex-[1_1_380px] flex-col gap-3">
-            <p className="text-[15px] text-muted">Fix plan for {host}</p>
+            <p className="flex items-center gap-2 text-[15px] text-muted">
+              <SiteLogo src={logoUrl(host.replace(/^www\./, ""))} size={24} />
+              Fix plan for {host}
+            </p>
             <h1 className="font-display text-[32px] leading-tight font-bold">Make your website easy for AI assistants to use</h1>
             {items.length > 0 ? (
               <p className="text-muted">
@@ -83,7 +88,7 @@ export default async function FixPage({ params }: Props) {
                         {i + 1}. {it.title}
                       </h3>
                       {it.points > 0 && (
-                        <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${TONE.good.bg} ${TONE.good.text}`}>+{it.points} points</span>
+                        <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${TONE.good.bg} ${TONE.good.text}`}>+{it.points} {it.points === 1 ? "point" : "points"}</span>
                       )}
                     </div>
                     <p className="mt-1 text-muted">{it.detail}</p>

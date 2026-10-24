@@ -5,7 +5,7 @@ import { getFilters, getLeaderboard } from "@/lib/leaderboard";
 // Location filter paused: re-add parsePlace, placeLabel to the import above.
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader, TONE, toneFor } from "../ui";
-import { SiteLogo } from "./site-logo";
+import { SiteLogo } from "../site-logo";
 
 export const dynamic = "force-dynamic";
 
