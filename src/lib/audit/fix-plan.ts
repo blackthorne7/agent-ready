@@ -2,8 +2,8 @@
 // each one would add, plus a prompt a business owner can paste into their site builder's AI
 // (Wix, Squarespace, Lovable, Claude) or send to their developer.
 
-import { scoreCategory, scoreTotal } from "./index";
-import { CATEGORY_ORDER } from "./rubric";
+// Imports only pure modules, so the report page can rank fixes in the browser.
+import { CATEGORY_ORDER, scoreCategory, scoreTotal } from "./rubric";
 import type { Category, CheckResult } from "./types";
 import type { Fixes } from "./fixes";
 
