@@ -4,10 +4,11 @@ import { saveAudit } from "@/lib/audit/save";
 import { AuditForm } from "../audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow, TONE, toneFor, type Tone } from "../ui";
 import { AgentSection } from "./agent-section";
+import { AgentEvaluationProgress } from "./AgentEvaluationProgress";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ url?: string }> };
+type Props = { searchParams: Promise<{ url?: string; demo?: string }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { url } = await searchParams;
@@ -43,7 +44,18 @@ const CHECK_TONE: Record<CheckResult["status"], { className: string; label: stri
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 export default async function ReportPage({ searchParams }: Props) {
-  const { url } = await searchParams;
+  const { url, demo } = await searchParams;
+  if (demo === "1") {
+    return (
+      <div className="text-[17px] leading-[1.55]">
+        <SiteHeader />
+        <main className="mx-auto flex max-w-[1040px] flex-col gap-10 px-6 py-12">
+          <AgentEvaluationProgress mode="demo" />
+        </main>
+        <SiteFooter />
+      </div>
+    );
+  }
   const report = url ? await runAudit(url) : null;
   if (report) await saveAudit(report);
   const cookies = report?.checks.filter((c) => c.group === "cookies") ?? [];
