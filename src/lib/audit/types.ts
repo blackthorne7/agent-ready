@@ -1,4 +1,5 @@
 import type { CheerioAPI } from "cheerio";
+import type { BlockedAccess } from "./blocked";
 
 /** Agent-friendliness rubric categories (see evals/AGENT_CHECKS.md). */
 export type Category = "A" | "B" | "C" | "D" | "E" | "F";
@@ -22,6 +23,8 @@ export interface Fetched {
   redirects: string[];
   /** Raw Set-Cookie headers from the final response. */
   setCookies: string[];
+  /** Response headers of the final response, lower-cased names. */
+  headers?: Record<string, string>;
   elapsedMs: number;
   error?: string;
 }
@@ -134,5 +137,7 @@ export interface Report {
   tasks: TaskRun[];
   /** Browser behaviors recorded but not scored. */
   diagnostics: Diagnostic[];
+  /** Blocked sites only: who blocked us and what agents can still read. See blocked.ts. */
+  access?: BlockedAccess;
   error?: string;
 }
