@@ -1,14 +1,20 @@
 import { z } from "zod";
-import { normalizeUrl } from "@/lib/audit";
+import { normalizeUrl, runAudit } from "@/lib/audit";
+import { applyBrand } from "@/lib/audit/business";
 import { assertPublicUrl } from "@/lib/audit/fetch";
-import { runAgentTasks } from "../../../../lib/agent/tasks";
+import { saveAudit } from "@/lib/audit/save";
+import { getBrand } from "@/lib/context-dev";
+import { runAgentTasks, toTaskRun } from "../../../../lib/agent/tasks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const Body = z.object({ url: z.string().trim().min(1) });
 
-/** Runs the agent tasks (lib/agent/tasks.ts) against a site. Takes up to ~2 minutes. */
+/**
+ * Runs the agent tasks (lib/agent/tasks.ts) against a site, then re-scores the site with their
+ * results so the rubric's task-based checks count. Takes up to ~2 minutes.
+ */
 export async function POST(req: Request) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -23,6 +29,12 @@ export async function POST(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
 
+  // The brand lookup (industry, location) runs alongside the agent, so it adds no wait.
+  const brand = getBrand(new URL(url).hostname.replace(/^www\./, ""));
   const tasks = await runAgentTasks(url);
-  return Response.json({ url, tasks });
+  const report = await runAudit(url, { tasks: tasks.map(toTaskRun) });
+  report.business = applyBrand(report.business, await brand);
+  // Saved as the site's latest audit, so the leaderboard ranks the score that includes the agent.
+  await saveAudit(report);
+  return Response.json({ url, tasks, report });
 }

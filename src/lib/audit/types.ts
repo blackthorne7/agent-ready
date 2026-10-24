@@ -104,6 +104,8 @@ export interface BusinessInfo {
   name?: string;
   /** A business_types slug in supabase/schema.sql, e.g. "restaurant". */
   businessType?: string;
+  /** Where businessType came from: the site's own schema.org data, Context.dev, or page keywords. */
+  businessTypeSource?: "schema" | "brand" | "keywords";
   city?: string;
   region?: string;
   country?: string;
