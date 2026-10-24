@@ -71,6 +71,7 @@
 
 > Reported as its own diagnostic section. When a check fails, it counts once toward the category shown in brackets (no double-counting).
 > Using cookies is **not** a problem by itself.
+> **No separate score:** every check here already counts toward one of the categories A–F above (see brackets), so cookie issues are scored once, never twice.
 
 ### Cookie consent banner
 - [ ] Banner doesn't block the main content the agent needs *(→ E)*
