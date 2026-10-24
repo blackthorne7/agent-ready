@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CATEGORY_ORDER, runAudit, type CheckResult } from "@/lib/audit";
 import { AuditForm } from "../audit-form";
+import { ScoreRing, SiteFooter, SiteHeader, StatusRow, TONE, toneFor, type Tone } from "../ui";
 
 export const dynamic = "force-dynamic";
 
@@ -46,18 +47,12 @@ export default async function ReportPage({ searchParams }: Props) {
   const cookies = report.checks.filter((c) => c.group === "cookies");
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-8 px-4 py-12">
-      <nav className="flex flex-col gap-4">
-        <Link href="/" className="font-mono text-sm text-emerald-600">
-          ← agent ready
-        </Link>
-        <AuditForm defaultValue={url} />
-      </nav>
+    <div className="text-[17px] leading-[1.55]">
+      <SiteHeader />
 
-      {report.error ? (
-        <div className="rounded-xl border border-red-300 bg-red-50 p-5 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          <h1 className="font-medium">Couldn&apos;t audit {report.url}</h1>
-          <p className="mt-1 text-sm">{report.error}</p>
+      <main className="mx-auto flex max-w-[1040px] flex-col gap-10 px-6 py-12">
+        <div id="check">
+          <AuditForm defaultValue={url ?? ""} />
         </div>
       ) : (
         <>
@@ -96,8 +91,33 @@ export default async function ReportPage({ searchParams }: Props) {
                   {report.categories[cat].score != null && !report.categories[cat].countedInTotal && " · too little measured to count"}
                 </p>
               </div>
+            </section>
+
+            {ORDER.map((cat) => (
+              <section key={cat} className="flex flex-col gap-3">
+                <h2 className="font-display text-[28px] font-bold tracking-[-0.02em]">{PLAIN_LABELS[cat]}</h2>
+                {report.checks
+                  .filter((c) => c.category === cat)
+                  .map((c) => {
+                    const { tone, label } = CHECK_TONE[c.status];
+                    return (
+                      <article key={c.id} className="rounded-[20px] border border-border bg-card p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="font-semibold">{c.title}</h3>
+                          <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${TONE[tone].bg} ${TONE[tone].text}`}>{label}</span>
+                        </div>
+                        <p className="mt-1 text-muted">{c.detail}</p>
+                        {c.fix && c.status !== "pass" && (
+                          <pre className="mt-3 overflow-x-auto rounded-xl bg-band p-3 font-mono text-xs whitespace-pre-wrap text-foreground">{c.fix}</pre>
+                        )}
+                      </article>
+                    );
+                  })}
+              </section>
             ))}
-          </section>
+          </>
+        )}
+      </main>
 
           {order.map((cat) => (
             <section key={cat} className="flex flex-col gap-3">

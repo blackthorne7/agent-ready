@@ -12,7 +12,7 @@
     "test": "tsx --test src/lib/audit/*.test.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.3.0",
+    "@anthropic-ai/sdk": "1.2.0",
     "@modelcontextprotocol/server": "^2.4.0",
     "@supabase/supabase-js": "^2.118.0",
     "cheerio": "^1.2.0",
