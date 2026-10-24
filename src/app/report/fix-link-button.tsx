@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** How long the "Link copied" message shows before the fix page opens. */
 const OPEN_AFTER_MS = 2500;
@@ -11,19 +11,93 @@ type Source = "banner" | "repeat";
 
 type State =
   | { kind: "idle" }
-  | { kind: "creating"; from: Source; action: "copy" | "email" }
+  | { kind: "creating"; from: Source; action: "copy" | "email" | "pay" }
   | { kind: "copied"; from: Source; href: string; clipboard: boolean; staying: boolean }
   | { kind: "error"; from: Source; message: string };
 
-async function createFixLink(url: string): Promise<string> {
+/** Whether exporting needs payment, and the paid Stripe Checkout Session if the visitor just came back from one. */
+export interface Payment {
+  required: boolean;
+  priceLabel: string;
+  /** ?checkout=<session id> from Stripe's return URL. */
+  checkout?: string;
+}
+
+class PaymentRequired extends Error {
+  constructor(
+    message: string,
+    /** Paid for an earlier report of this site; it changed since, so this report needs a new payment. */
+    readonly newReport: boolean,
+  ) {
+    super(message);
+  }
+}
+
+async function createFixLink(url: string, checkout: string | undefined): Promise<string> {
   const res = await fetch("/api/fix-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, checkout }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 402) throw new PaymentRequired(body.error ?? "Payment required", !!body.newReport);
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return new URL(body.path, window.location.origin).toString();
+}
+
+async function startCheckout(url: string): Promise<void> {
+  const res = await fetch("/api/checkout", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ url }),
   });
   const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.checkoutUrl) throw new Error(body.error ?? `Request failed (${res.status})`);
+  window.location.assign(body.checkoutUrl);
+}
+
+/** "Already paid?": the paid session for this site bought with `email`, looked up in Stripe. */
+async function restorePayment(url: string, email: string): Promise<string> {
+  const res = await fetch("/api/checkout/restore", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, email }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.checkout) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return body.checkout;
+}
+
+/** Whether a stored payment still covers this site's current report. */
+async function paymentStatus(url: string, checkout: string): Promise<"paid" | "new-report" | "unpaid"> {
+  const res = await fetch("/api/checkout/status", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, checkout }),
+  });
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
-  return new URL(body.path, window.location.origin).toString();
+  return body.status;
+}
+
+// A paid session is remembered per site in this browser, so a reload or a later visit doesn't ask again.
+const paidKey = (url: string) => `agentready:fix-paid:${new URL(url).hostname.replace(/^www\./, "")}`;
+
+function readPaid(url: string): string | undefined {
+  try {
+    return localStorage.getItem(paidKey(url)) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePaid(url: string, session: string | null) {
+  try {
+    if (session) localStorage.setItem(paidKey(url), session);
+    else localStorage.removeItem(paidKey(url));
+  } catch {
+    // Private mode or blocked storage: the visitor just pays per visit.
+  }
 }
 
 // Safari only allows clipboard writes inside the click, so hand it a ClipboardItem that resolves
@@ -51,10 +125,47 @@ export type FixLink = ReturnType<typeof useFixLink>;
  * Creates the shareable fix plan (/fix/<slug>) from the saved final audit of `url`, copies its link
  * and opens it. `url` is the final report's URL, the one /api/agent saved under.
  */
-export function useFixLink(url: string) {
+export function useFixLink(url: string, payment: Payment = { required: false, priceLabel: "" }) {
   const [state, setState] = useState<State>({ kind: "idle" });
+  const [paidSession, setPaidSession] = useState<string | undefined>(payment.checkout);
+  // The stored payment was for an earlier report: the site changed since, so this one needs a new payment.
+  const [newReport, setNewReport] = useState(false);
   const pending = useRef<{ url: string; href: Promise<string> } | null>(null);
   const busy = state.kind === "creating";
+  const locked = payment.required && !paidSession;
+
+  // Remember a session Stripe just returned, or pick up one paid earlier, and drop ?checkout= from the address bar.
+  useEffect(() => {
+    if (!payment.required) return;
+    if (payment.checkout) {
+      writePaid(url, payment.checkout);
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("checkout");
+      window.history.replaceState(null, "", clean);
+    } else {
+      setPaidSession(readPaid(url));
+    }
+  }, [url, payment.required, payment.checkout]);
+
+  const forget = useCallback(
+    (changed: boolean) => {
+      writePaid(url, null);
+      setPaidSession(undefined);
+      setNewReport(changed);
+    },
+    [url],
+  );
+
+  /** Re-checks a stored payment against this report, so "Paid" never shows for a report it doesn't cover. */
+  const verify = useCallback(async () => {
+    if (!payment.required || !paidSession) return;
+    try {
+      const status = await paymentStatus(url, paidSession);
+      if (status !== "paid") forget(status === "new-report");
+    } catch {
+      // Can't tell right now; /api/fix-link checks again before exporting.
+    }
+  }, [url, payment.required, paidSession, forget]);
 
   useEffect(() => {
     if (state.kind !== "copied" || state.staying) return;
@@ -71,8 +182,10 @@ export function useFixLink(url: string) {
 
   function link(): Promise<string> {
     if (pending.current?.url !== url) {
-      const href = createFixLink(url).catch((err) => {
+      const href = createFixLink(url, paidSession).catch((err) => {
         pending.current = null;
+        // A stored session that no longer covers this report: forget it and lock again.
+        if (err instanceof PaymentRequired) forget(err.newReport);
         throw err;
       });
       pending.current = { url, href };
@@ -82,7 +195,17 @@ export function useFixLink(url: string) {
 
   const fail = (from: Source, err: unknown) => setState({ kind: "error", from, message: err instanceof Error ? err.message : String(err) });
 
+  async function pay(from: Source) {
+    setState({ kind: "creating", from, action: "pay" });
+    try {
+      await startCheckout(url);
+    } catch (err) {
+      fail(from, err);
+    }
+  }
+
   async function copyAndOpen(from: Source) {
+    if (locked) return pay(from);
     setState({ kind: "creating", from, action: "copy" });
     const href = link();
     // A clipboard write can hang (no focus or user gesture), so stop waiting and show the link instead.
@@ -96,6 +219,7 @@ export function useFixLink(url: string) {
   }
 
   async function email(from: Source) {
+    if (locked) return pay(from);
     setState({ kind: "creating", from, action: "email" });
     try {
       const h = await link();
@@ -110,10 +234,21 @@ export function useFixLink(url: string) {
 
   const stay = () => setState((s) => (s.kind === "copied" ? { ...s, staying: true } : s));
 
-  return { state, busy, copyAndOpen, email, stay };
+  /** Unlocks this browser again for a buyer who cleared storage or switched device. Throws with a message to show. */
+  async function restore(email: string) {
+    const session = await restorePayment(url, email);
+    writePaid(url, session);
+    setPaidSession(session);
+    setNewReport(false);
+    pending.current = null;
+  }
+
+  return { state, busy, locked, restore, verify, newReport, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
 }
 
-function copyLabel({ state }: FixLink): string {
+function copyLabel({ state, locked, priceLabel }: FixLink): string {
+  if (state.kind === "creating" && state.action === "pay") return "Opening checkout…";
+  if (locked) return `Get my fix link · ${priceLabel}`;
   if (state.kind === "creating" && state.action === "copy") return "Creating your link…";
   if (state.kind === "copied") return state.clipboard ? "Copied ✓" : "Link ready";
   return "Copy my fix link";
@@ -132,7 +267,7 @@ function Status({ fix, from }: { fix: FixLink; from: Source }) {
   if (state.kind === "error") {
     return (
       <p role="alert" className="rounded-2xl bg-white px-5 py-4 text-[#9f1239]">
-        Couldn&apos;t create your fix link: {state.message}
+        Couldn&apos;t {fix.locked ? "start checkout" : "create your fix link"}: {state.message}
       </p>
     );
   }
@@ -166,8 +301,81 @@ function Status({ fix, from }: { fix: FixLink; from: Source }) {
   );
 }
 
+/** Price and demo card while locked; a receipt line once paid. Nothing when there's no paywall. */
+function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
+  if (fix.paid) return <p className={className}>Paid ✓ Your fix link for this report is unlocked.</p>;
+  if (!fix.locked) return null;
+  return (
+    <p className={className}>
+      {fix.newReport && <strong>Your site changed since you paid, so this is a new report. </strong>}
+      {fix.priceLabel} for this report&apos;s fix link; the report itself stays free. Re-checking without changes stays unlocked; a new report after
+      changes is {fix.priceLabel} again. Demo checkout (Stripe test mode): pay with card <span className="font-mono">4242 4242 4242 4242</span>, any
+      future date and any CVC. No real money is charged.
+    </p>
+  );
+}
+
+/** "Already paid? Restore with your email", for a buyer whose browser forgot the payment. */
+function RestorePayment({ fix }: { fix: FixLink }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<{ kind: "idle" | "checking" } | { kind: "error"; message: string }>({ kind: "idle" });
+  if (!fix.locked) return null;
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="self-start text-[15px] font-semibold text-white underline underline-offset-4">
+        Already paid? Restore with your email
+      </button>
+    );
+  }
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus({ kind: "checking" });
+    try {
+      await fix.restore(email);
+    } catch (err) {
+      setStatus({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2">
+      <label htmlFor="restore-email" className="text-[15px] text-[#eaf1ff]">
+        The email you used at checkout
+      </label>
+      <div className="flex flex-wrap gap-2.5">
+        <input
+          id="restore-email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="min-h-[48px] min-w-0 flex-[1_1_240px] rounded-xl px-4 text-lg text-black"
+        />
+        <button
+          type="submit"
+          disabled={status.kind === "checking"}
+          className="min-h-[48px] rounded-xl border-2 border-white px-5 text-lg font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+        >
+          {status.kind === "checking" ? "Checking…" : "Restore"}
+        </button>
+      </div>
+      {status.kind === "error" && (
+        <p role="alert" className="rounded-xl bg-white px-4 py-2.5 text-[#9f1239]">
+          {status.message}
+        </p>
+      )}
+    </form>
+  );
+}
+
 /** The report's main call to action. */
 export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
+  // The banner shows with the final, saved report, so this is when a stored payment can be checked against it.
+  const { verify } = fix;
+  useEffect(() => {
+    void verify();
+  }, [verify]);
   return (
     <section aria-labelledby="fix-link-title" className="flex flex-col gap-5 rounded-3xl bg-accent-strong p-7 text-white sm:p-9">
       <div className="flex flex-wrap items-center justify-between gap-6">
@@ -198,6 +406,8 @@ export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
           </button>
         </div>
       </div>
+      <PaymentNote fix={fix} className="text-[15px] text-[#eaf1ff]" />
+      <RestorePayment fix={fix} />
       <Status fix={fix} from="banner" />
     </section>
   );
@@ -218,6 +428,7 @@ export function FixLinkRepeat({ fix, count }: { fix: FixLink; count: number }) {
         </button>
         <span className="text-muted">{count === 1 ? "Your fix" : `All ${count} fixes`}, ready to paste into your website builder.</span>
       </div>
+      <PaymentNote fix={fix} className="text-[15px] text-muted" />
       <Status fix={fix} from="repeat" />
     </div>
   );
