@@ -4,7 +4,7 @@
 
 // Imports only pure modules, so the report page can rank fixes in the browser.
 import { CATEGORY_ORDER, scoreCategory, scoreTotal } from "./rubric";
-import type { Category, CheckResult } from "./types";
+import type { Category, CheckResult, TaskRun } from "./types";
 import type { Fixes } from "./fixes";
 
 export interface FixItem {
@@ -15,9 +15,27 @@ export interface FixItem {
   detail: string;
   /** What to change, written for whoever edits the site. */
   fix: string;
-  /** Points the overall score gains if this check passes, all else equal. */
+  /** Points the overall score gains if this check passes, all else equal (0 for agent findings). */
   points: number;
+  /** "agent": a task our AI agent got stuck on, which is the most site-specific finding. */
+  source: "agent" | "check";
+  /** Needs code or server access; a site builder's AI (Wix, Squarespace) can't do it. */
+  developer: boolean;
 }
+
+// Checks whose fixes need a developer: server, hosting or application code changes.
+const DEVELOPER_CHECKS = new Set([
+  "server-rendered",
+  "agent-protocols",
+  "no-hidden-dom",
+  "no-login-redirect",
+  "readable-urls",
+  "stable-selectors",
+  "response-time",
+  "no-bot-wall",
+  "no-exposed-secrets",
+  "cookie-security",
+]);
 
 function totalScore(checks: CheckResult[]): number {
   const categories = Object.fromEntries(CATEGORY_ORDER.map((c) => [c, scoreCategory(c, checks)])) as Record<
@@ -41,34 +59,81 @@ export function scoreIfFixed(checks: CheckResult[], ids: string[]): number {
   return totalScore(checks.map((c) => (fix.has(c.id) ? { ...c, rating: 4 as const, score: 1, status: "pass" as const } : c)));
 }
 
-/** Failing or needs-work checks that have a fix, biggest score gain first. */
-export function rankFixes(checks: CheckResult[], limit = 8): FixItem[] {
+/** Tasks the AI agent failed or was blocked on, with its own reason and suggested fix. */
+function agentFindings(tasks: TaskRun[]): FixItem[] {
+  const seen = new Set<string>();
+  return tasks
+    .filter((t) => (t.status === "failed" || t.status === "blocked") && !seen.has(t.taskId) && seen.add(t.taskId))
+    .map((t) => ({
+      id: `agent-${t.taskId}`,
+      category: "C" as const,
+      title: `Our AI agent got stuck: ${t.title ?? t.goal}`,
+      detail: t.reason,
+      fix: t.fix ?? "Make this possible without running JavaScript, logging in or solving a captcha.",
+      points: 0,
+      source: "agent" as const,
+      developer: false,
+    }));
+}
+
+/**
+ * What to fix, most useful first: the tasks our AI agent got stuck on (when `tasks` are given),
+ * then failing or needs-work checks that have a fix, biggest score gain first.
+ */
+export function rankFixes(checks: CheckResult[], tasks: TaskRun[] = [], limit = 8): FixItem[] {
   const base = totalScore(checks);
-  return (
+  const fromChecks = (
     checks
       // Task checks record agent outcomes, not something to change; their causes show up in other checks.
       .filter((c) => c.fix && c.method !== "task" && (c.status === "fail" || c.status === "warn") && c.score != null)
       .map((check) => ({ check, points: Math.max(0, scoreIfFixed(checks, [check.id]) - base) }))
       .sort((a, b) => b.points - a.points || b.check.weight - a.check.weight)
-      .slice(0, limit)
-      .map(({ check: c, points }) => ({ id: c.id, category: c.category, title: c.title, detail: c.detail, fix: fixText(c.fix!), points }))
+      .map(({ check: c, points }) => ({
+        id: c.id,
+        category: c.category,
+        title: c.title,
+        detail: c.detail,
+        fix: fixText(c.fix!),
+        points,
+        source: "check" as const,
+        developer: DEVELOPER_CHECKS.has(c.id),
+      }))
   );
+  return [...agentFindings(tasks), ...fromChecks].slice(0, limit);
 }
+
+const numbered = (items: FixItem[]) =>
+  items.map(
+    (it, i) =>
+      `${i + 1}. ${it.title}${it.source === "agent" ? " (found by an AI agent testing the site)" : ""}: ${it.detail}\n   Fix: ${it.fix.replace(/\n/g, "\n   ")}`,
+  );
 
 /** One prompt covering the ranked fixes and the drafted files. */
 export function buildFixPrompt(siteUrl: string, items: FixItem[], files: Pick<Fixes, "llmsTxt" | "jsonLd" | "robotsTxt">): string {
   const origin = new URL(siteUrl).origin;
+  const builder = items.filter((it) => !it.developer);
+  const developer = items.filter((it) => it.developer);
   return [
     `I run the website ${origin}. An audit found that AI assistants (like ChatGPT, Claude and Perplexity) have trouble reading and using it.`,
     `Please make the changes below, most important first. Keep the site's design and wording the same otherwise.`,
     "",
     "## Changes",
     "",
-    ...items.map((it, i) => `${i + 1}. ${it.title}: ${it.detail}\n   Fix: ${it.fix.replace(/\n/g, "\n   ")}`),
+    ...numbered(builder),
+    ...(developer.length
+      ? [
+          "",
+          "## For a developer",
+          "",
+          "These need code or server changes. If you're a website builder's AI (Wix, Squarespace, Shopify), skip them; the owner will pass them to their developer.",
+          "",
+          ...numbered(developer),
+        ]
+      : []),
     "",
     "## Files to add",
     "",
-    "Replace every TODO with the business's real details (address, opening hours, phone). If a file already exists, merge these lines into it instead of replacing it.",
+    "Fill in each TODO only with real details you know (address, opening hours, phone). If you don't know a value, delete that field or line instead; never publish the word TODO. If a file already exists, merge these lines into it instead of replacing it.",
     "",
     "1. /llms.txt (a plain-text summary for AI assistants):",
     "```",

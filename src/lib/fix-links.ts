@@ -4,7 +4,7 @@
 
 import { randomBytes } from "node:crypto";
 import { generateFixes } from "./audit/fixes";
-import type { CheckResult } from "./audit/types";
+import type { CheckResult, TaskRun } from "./audit/types";
 import { getBrand } from "./context-dev";
 import { adminDb, publicDb } from "./supabase";
 
@@ -32,7 +32,7 @@ export async function createFixLink(siteUrl: string): Promise<string> {
   const brand = getBrand(new URL(siteUrl).hostname.replace(/^www\./, ""), 20_000);
   const { data: audit, error } = await db
     .from("audits")
-    .select("id")
+    .select("id, businesses(business_type)")
     .eq("url", siteUrl)
     .order("audited_at", { ascending: false })
     .limit(1)
@@ -40,7 +40,8 @@ export async function createFixLink(siteUrl: string): Promise<string> {
   if (error) throw new Error(error.message);
   if (!audit) throw new FixLinkError("No saved audit for this site yet. Run the check first.", 404);
 
-  const fixes = await generateFixes(siteUrl, await brand);
+  const business = Array.isArray(audit.businesses) ? audit.businesses[0] : audit.businesses;
+  const fixes = await generateFixes(siteUrl, { brand: await brand, businessType: business?.business_type });
   const slug = newSlug();
   const { error: insertError } = await db.from("fix_links").insert({
     slug,
@@ -61,7 +62,7 @@ export interface FixLink {
   jsonLd: string;
   robotsTxt: string;
   mcpManifest: string;
-  audit: { url: string; score: number; grade: string; auditedAt: string; checks: CheckResult[] };
+  audit: { url: string; score: number; grade: string; auditedAt: string; checks: CheckResult[]; tasks: TaskRun[] };
 }
 
 export async function getFixLink(slug: string): Promise<FixLink | null> {
@@ -69,7 +70,7 @@ export async function getFixLink(slug: string): Promise<FixLink | null> {
   if (!db || !/^[a-z0-9]{4,32}$/.test(slug)) return null;
   const { data, error } = await db
     .from("fix_links")
-    .select("slug, created_at, llms_txt, json_ld, robots_txt, mcp_manifest, audits(url, score, grade, audited_at, checks)")
+    .select("slug, created_at, llms_txt, json_ld, robots_txt, mcp_manifest, audits(url, score, grade, audited_at, checks, tasks)")
     .eq("slug", slug)
     .maybeSingle();
   if (error) {
@@ -85,6 +86,13 @@ export async function getFixLink(slug: string): Promise<FixLink | null> {
     jsonLd: data.json_ld ?? "",
     robotsTxt: data.robots_txt ?? "",
     mcpManifest: data.mcp_manifest ?? "",
-    audit: { url: audit.url, score: audit.score, grade: audit.grade, auditedAt: audit.audited_at, checks: audit.checks },
+    audit: {
+      url: audit.url,
+      score: audit.score,
+      grade: audit.grade,
+      auditedAt: audit.audited_at,
+      checks: audit.checks,
+      tasks: audit.tasks ?? [],
+    },
   };
 }

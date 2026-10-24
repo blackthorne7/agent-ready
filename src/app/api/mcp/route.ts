@@ -37,7 +37,7 @@ const handler = createMcpHandler(
       },
       async ({ url }) => {
         const brand = await getBrand(new URL(normalizeUrl(url)).hostname.replace(/^www\./, ""), 15_000);
-        const fixes = await generateFixes(url, brand);
+        const fixes = await generateFixes(url, { brand });
         return {
           content: [{ type: "text", text: JSON.stringify(fixes, null, 2) }],
           structuredContent: fixes as unknown as Record<string, unknown>,
