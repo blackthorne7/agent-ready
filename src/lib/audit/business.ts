@@ -1,4 +1,5 @@
 import { allNodes, typesOf } from "./checks";
+import { classifyByKeywords } from "./classify";
 import type { AuditContext, BusinessInfo } from "./types";
 
 // schema.org @type -> business_types slug (supabase/schema.sql). First match wins, so specific types come first.
@@ -29,7 +30,7 @@ const obj = (v: unknown): Node | undefined => {
   return first && typeof first === "object" ? (first as Node) : undefined;
 };
 
-/** Best-effort business name, type and location from the page's JSON-LD. */
+/** Best-effort business name, type and location from the page's JSON-LD, with a keyword fallback for the type. */
 export function detectBusiness(ctx: AuditContext): BusinessInfo {
   const nodes = allNodes(ctx);
   const matchRule = (n: Node) => TYPE_RULES.find(([re]) => typesOf(n).some((t) => re.test(t)));
@@ -37,7 +38,8 @@ export function detectBusiness(ctx: AuditContext): BusinessInfo {
   // The business entity itself: a specific type first, then a generic one.
   const specific = nodes.find((n) => matchRule(n));
   const biz = specific ?? nodes.find((n) => typesOf(n).some((t) => GENERIC_BUSINESS.test(t)));
-  const businessType = specific ? matchRule(specific)?.[1] : undefined;
+  // Structured data is the most reliable signal; fall back to keywords on the page.
+  const businessType = specific ? matchRule(specific)?.[1] : classifyByKeywords(ctx.$, ctx.url).businessType;
 
   // Its own address (typed or not), else any PostalAddress on the page.
   const address =

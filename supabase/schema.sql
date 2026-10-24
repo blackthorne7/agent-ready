@@ -26,6 +26,8 @@ insert into business_types (slug, label) values
   ('retail',     'Retail Store'),
   ('home',       'Home Services'),  -- plumbers, electricians, cleaners
   ('tech',       'Tech & Software'),
+  ('media',      'Media & News'),
+  ('government', 'Government & Nonprofit'),
   ('other',      'Other')
 on conflict (slug) do nothing;
 
