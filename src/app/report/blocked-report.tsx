@@ -4,6 +4,7 @@ import { USER_AGENT } from "@/lib/audit/fetch";
 import type { Report } from "@/lib/audit/types";
 import { CopyButton } from "../fix/[slug]/copy-button";
 import { SiteLogo } from "../site-logo";
+import { RecordBlocked } from "./record-blocked";
 import { StatusRow, TONE, type Tone } from "../ui";
 
 type Row = { title: string; detail: string; tone: Tone; label: string };
@@ -45,6 +46,7 @@ export function BlockedReport({ report, logoSrc }: { report: Report & { access: 
 
   return (
     <>
+      <RecordBlocked url={report.url} />
       <section className="flex flex-col gap-6">
         <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[15px] text-muted">
           <SiteLogo src={logoSrc} size={28} />

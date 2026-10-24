@@ -5,8 +5,10 @@ const TIMEOUT_MS = 5_000;
 
 /** Store an audit for the leaderboard and score history. Never throws: failures are logged. */
 export async function saveAudit(report: Report): Promise<void> {
-  // The audits table requires a score; bot-walled or unreachable sites get none under the rubric.
-  if (report.error || report.score == null) return;
+  // Bot-walled sites are saved without a score so the leaderboard can list them as blocked;
+  // unreachable or errored ones aren't saved.
+  const blocked = report.evaluationStatus === "blocked_by_site";
+  if (report.error || (report.score == null && !blocked)) return;
   try {
     const db = adminDb();
     if (!db) return;
@@ -33,13 +35,18 @@ export async function saveAudit(report: Report): Promise<void> {
       .insert({
         business_id: biz.id,
         url: report.url,
-        score: report.score,
-        grade: report.grade,
-        // Interim mapping from the A-F rubric to the original three columns (not shown on the
-        // leaderboard). Unmeasured categories store 0. Replace once the schema has A-F columns.
-        access_score: report.categories.A.score ?? 0,
-        understand_score: report.categories.B.score ?? 0,
-        act_score: report.categories.C.score ?? 0,
+        // Only blocked rows send status, so scored saves keep working on a database without the column.
+        ...(blocked
+          ? { status: "blocked", score: null, grade: null, access_score: null, understand_score: null, act_score: null }
+          : {
+              score: report.score,
+              grade: report.grade,
+              // Interim mapping from the A-F rubric to the original three columns (not shown on the
+              // leaderboard). Unmeasured categories store 0. Replace once the schema has A-F columns.
+              access_score: report.categories.A.score ?? 0,
+              understand_score: report.categories.B.score ?? 0,
+              act_score: report.categories.C.score ?? 0,
+            }),
         checks: report.checks,
         // The agent's task results, so fix plans can lead with what it actually got stuck on.
         tasks: report.tasks,

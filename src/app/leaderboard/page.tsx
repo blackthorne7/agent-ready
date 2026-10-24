@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { logoUrl } from "@/lib/context-dev";
-import { getFilters, getLeaderboard } from "@/lib/leaderboard";
+import { getBlocked, getFilters, getLeaderboard } from "@/lib/leaderboard";
 // Location filter paused: re-add parsePlace, placeLabel to the import above.
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader, TONE, toneFor } from "../ui";
@@ -70,7 +70,7 @@ export default async function LeaderboardPage({ searchParams }: Props) {
   // const placeParts = parsePlace(one(params.place));
   // const place = placeParts ? one(params.place) : undefined;
   const place = undefined;
-  const [filters, rows] = await Promise.all([getFilters(), getLeaderboard({ type, place })]);
+  const [filters, rows, blocked] = await Promise.all([getFilters(), getLeaderboard({ type, place }), getBlocked({ type })]);
   const typeLabel = (slug: string) => filters.types.find((t) => t.slug === slug)?.label ?? slug;
   // const placeName = placeParts ? (filters.places.find((p) => p.key === place)?.label ?? placeLabel(placeParts)) : undefined;
   const placeName: string | undefined = undefined;
@@ -202,6 +202,43 @@ export default async function LeaderboardPage({ searchParams }: Props) {
                 })}
               </ol>
             )}
+          </section>
+        )}
+
+        {blocked.length > 0 && (
+          <section aria-labelledby="blocked" className="overflow-hidden rounded-3xl border border-border bg-card">
+            <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:px-6">
+              <h2 id="blocked" className="font-display text-[22px] leading-tight font-bold tracking-[-0.01em]">
+                Blocking AI assistants
+              </h2>
+              <p className="text-sm text-muted">These websites turned our checker away, so AI assistants likely can&apos;t read them either. Not ranked: we only score what assistants can see.</p>
+            </div>
+            <ul className="divide-y divide-border">
+              {blocked.map((r) => (
+                <li key={r.domain}>
+                  <Link
+                    href={`/report?url=${encodeURIComponent(r.domain)}`}
+                    className="flex items-center gap-3 px-4 py-3.5 text-foreground no-underline hover:bg-border/50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent sm:gap-4 sm:px-6"
+                  >
+                    <SiteLogo src={logoUrl(r.domain)} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{r.name ?? r.domain}</span>
+                      <span className="flex flex-wrap gap-x-3 text-sm text-muted sm:gap-x-0">
+                        {r.name && <span className="hidden truncate sm:block">{r.domain}</span>}
+                        {!type && <span className={`whitespace-nowrap ${r.name ? "sm:before:mx-2 sm:before:content-['·']" : ""}`}>{typeLabel(r.business_type)}</span>}
+                      </span>
+                    </span>
+                    <span className={`flex flex-none items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${TONE.bad.bg} ${TONE.bad.text}`}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="4" y="11" width="16" height="10" rx="2" />
+                        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                      </svg>
+                      Blocked
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 

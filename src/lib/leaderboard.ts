@@ -66,7 +66,8 @@ export async function getLeaderboard({ type, place }: { type?: string; place?: s
   const p = parsePlace(place);
   const rankColumn = type && p ? "local_type_rank" : p ? "local_rank" : type ? "type_rank" : "global_rank";
 
-  let q = db.from("leaderboard").select("*");
+  // Blocked sites have no score or rank; getBlocked lists them.
+  let q = db.from("leaderboard").select("*").not("score", "is", null);
   if (type) q = q.eq("business_type", type);
   if (p) {
     q = q.eq("city", p.city);
@@ -79,4 +80,25 @@ export async function getLeaderboard({ type, place }: { type?: string; place?: s
     return null;
   }
   return data.map((r) => ({ ...r, rank: r[rankColumn] }));
+}
+
+export interface BlockedRow {
+  domain: string;
+  name: string | null;
+  business_type: string;
+  audited_at: string;
+}
+
+/** Sites whose latest check hit a bot wall: listed, but not ranked (we can't score what we can't see). */
+export async function getBlocked({ type }: { type?: string }, limit = 50): Promise<BlockedRow[]> {
+  const db = publicDb();
+  if (!db) return [];
+  let q = db.from("leaderboard").select("domain, name, business_type, audited_at").is("score", null);
+  if (type) q = q.eq("business_type", type);
+  const { data, error } = await q.order("audited_at", { ascending: false }).limit(limit);
+  if (error) {
+    console.error("[leaderboard blocked]", error.message);
+    return [];
+  }
+  return data;
 }

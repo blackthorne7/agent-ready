@@ -32,13 +32,14 @@ export async function createFixLink(siteUrl: string): Promise<string> {
   const brand = getBrand(new URL(siteUrl).hostname.replace(/^www\./, ""), 20_000);
   const { data: audit, error } = await db
     .from("audits")
-    .select("id, businesses(business_type)")
+    .select("id, score, businesses(business_type)")
     .eq("url", siteUrl)
     .order("audited_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!audit) throw new FixLinkError("No saved audit for this site yet. Run the check first.", 404);
+  if (audit.score == null) throw new FixLinkError("This site blocked our check, so there's no fix plan yet. Let our checker in and check again.", 409);
 
   const business = Array.isArray(audit.businesses) ? audit.businesses[0] : audit.businesses;
   const fixes = await generateFixes(siteUrl, { brand: await brand, businessType: business?.business_type });
