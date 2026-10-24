@@ -72,27 +72,3 @@ export function AgentStrip({ state }: { state: AgentState }) {
     </div>
   );
 }
-
-/** Every step the agent took, for the technical details. */
-export function AgentSteps({ tasks }: { tasks: AgentTaskRun[] }) {
-  return (
-    <div className="flex flex-col gap-4">
-      {tasks.map((t) => (
-        <div key={t.id} className="flex flex-col gap-1">
-          <p className="font-sans text-sm text-foreground">
-            {t.title}: {AGENT_STATUS[t.result.status].label}. {t.result.reason}
-          </p>
-          <ol className="flex flex-col gap-1">
-            {t.steps.map((s) => (
-              <li key={s.n} className="break-words">
-                {s.n}. {s.action}
-                {typeof s.args.url === "string" ? ` ${s.args.url}` : ""} — {s.observationSummary}
-              </li>
-            ))}
-          </ol>
-          {t.result.suggestedFix && t.result.status !== "success" && <p className="whitespace-pre-wrap">Suggested fix: {t.result.suggestedFix}</p>}
-        </div>
-      ))}
-    </div>
-  );
-}

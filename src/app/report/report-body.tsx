@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-// Import from rubric/fix-plan/types directly: "@/lib/audit" pulls in server-only fetch code.
+// Import from fix-plan/types directly: "@/lib/audit" pulls in server-only fetch code.
 import { rankFixes, type FixItem } from "@/lib/audit/fix-plan";
-import { CATEGORY_ORDER } from "@/lib/audit/rubric";
 import type { CheckResult, Report } from "@/lib/audit/types";
 import type { AgentTaskRun } from "../../../lib/agent/tasks";
 import { SiteLogo } from "../site-logo";
 import { ScoreRing, TONE, toneFor, type Tone } from "../ui";
 import { AgentEvaluationProgress, type EvaluationStage } from "./AgentEvaluationProgress";
-import { AgentSteps, AgentStrip, useAgentRun } from "./agent-section";
+import { AgentStrip, useAgentRun } from "./agent-section";
 import { FixLinkBanner, FixLinkRepeat, useFixLink } from "./fix-link-button";
 import { AREAS, TASK_CHECK, TASK_STUCK, goodFor, todoFor, whyFor } from "./plain";
 
@@ -34,15 +33,6 @@ const IMPACT: { min: number; label: string; tone: Tone | null }[] = [
   { min: 0, label: "Small", tone: null },
 ];
 
-const CHECK_STATUS: Record<CheckResult["status"], { label: string; className: string }> = {
-  pass: { label: "PASS", className: TONE.good.text },
-  warn: { label: "WARN", className: TONE.warn.text },
-  fail: { label: "FAIL", className: TONE.bad.text },
-  na: { label: "N/A", className: "text-muted" },
-  unknown: { label: "NOT CHECKED", className: "text-muted" },
-};
-
-const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 const joinAnd = (parts: string[]) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
@@ -233,59 +223,11 @@ export function ReportBody({ checklistReport, logoSrc = null }: { checklistRepor
         </section>
       )}
 
-      <details className="rounded-2xl border border-border bg-band px-5 py-[18px]">
-        <summary className="cursor-pointer font-semibold">Technical details for your web person</summary>
-        <div className="mt-4 flex flex-col gap-6 font-mono text-[13px] text-muted">
-          <p>
-            Rubric {report.rubricVersion} · {pct(report.coverage)} of the checklist measured
-            {report.taskSuccessRate != null ? ` · agent tasks ${pct(report.taskSuccessRate)} completed` : ""}
-          </p>
-          {CATEGORY_ORDER.map((cat) => {
-            const c = report.categories[cat];
-            return (
-              <div key={cat} className="flex flex-col gap-2">
-                <p className="font-sans text-sm font-semibold text-foreground">
-                  {cat}. {c.label} {c.score != null ? `${c.score}/100` : "not scored"} · {pct(c.coverage)} measured
-                </p>
-                {report.checks
-                  .filter((r) => r.category === cat)
-                  .map((r) => (
-                    <div key={r.id}>
-                      <p>
-                        <span className={CHECK_STATUS[r.status].className}>{CHECK_STATUS[r.status].label}</span> {r.id}: {r.detail}
-                      </p>
-                      {r.fix && r.status !== "pass" && <p className="pl-4 whitespace-pre-wrap">Fix: {r.fix}</p>}
-                      {r.evidence && r.evidence.length > 0 && r.status !== "pass" && (
-                        <ul className="pl-4 break-all">
-                          {r.evidence.map((e, i) => (
-                            <li key={i}>{e}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ))}
-              </div>
-            );
-          })}
-          {agent.kind === "done" && agent.tasks.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p className="font-sans text-sm font-semibold text-foreground">What the AI agent did</p>
-              <AgentSteps tasks={agent.tasks} />
-            </div>
-          )}
-          {agent.kind === "error" && <p>Agent run failed: {agent.message}</p>}
-          {report.diagnostics.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <p className="font-sans text-sm font-semibold text-foreground">Noticed, not scored</p>
-              {report.diagnostics.map((d) => (
-                <p key={d.id} className="break-all">
-                  {d.title}: {d.detail}
-                </p>
-              ))}
-            </div>
-          )}
-        </div>
-      </details>
+      {canLink && (
+        <p className="text-[15px] text-muted">
+          Technical details for your web person, with every check we ran, are in your fix link.
+        </p>
+      )}
     </>
   );
 }
