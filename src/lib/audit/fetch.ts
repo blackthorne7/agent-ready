@@ -63,6 +63,8 @@ async function readCapped(res: Response): Promise<string> {
 
 export async function safeFetch(raw: string): Promise<Fetched> {
   let current = raw;
+  const redirects: string[] = [];
+  const started = Date.now();
   try {
     for (let i = 0; i <= MAX_REDIRECTS; i++) {
       await assertPublicUrl(current);
@@ -73,6 +75,7 @@ export async function safeFetch(raw: string): Promise<Fetched> {
       });
       const location = res.headers.get("location");
       if (res.status >= 300 && res.status < 400 && location) {
+        redirects.push(current);
         current = new URL(location, current).toString();
         continue;
       }
@@ -82,6 +85,9 @@ export async function safeFetch(raw: string): Promise<Fetched> {
         ok: res.ok,
         contentType: res.headers.get("content-type") ?? "",
         body: await readCapped(res),
+        redirects,
+        setCookies: res.headers.getSetCookie(),
+        elapsedMs: Date.now() - started,
       };
     }
     throw new Error("Too many redirects");
@@ -92,6 +98,9 @@ export async function safeFetch(raw: string): Promise<Fetched> {
       ok: false,
       contentType: "",
       body: "",
+      redirects,
+      setCookies: [],
+      elapsedMs: Date.now() - started,
       error: err instanceof Error ? err.message : String(err),
     };
   }

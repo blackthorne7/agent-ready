@@ -20,6 +20,9 @@
 # production
 /build
 
+# local evaluation reports (pnpm evaluate)
+/reports/
+
 # misc
 .DS_Store
 *.pem

@@ -13,7 +13,7 @@ const handler = createMcpHandler(
       {
         title: "Audit a website for agent readiness",
         description:
-          "Checks whether AI agents can access, understand and act on a website (robots.txt, bot walls, structured data, hours, menus/products, MCP/OpenAPI endpoints, labeled forms). Returns a 0-100 score, grade and per-check results with fixes.",
+          "Scores how agent-friendly a website is on six categories (A discoverability, B controls, C tasks, D programmatic access, E robustness, F safety), including cookie/consent/session checks. Returns a 0-100 score, coverage (share of checks actually measured), per-check 0-4 ratings with evidence and fixes. Blocked sites get no score.",
         inputSchema: z.object({ url: z.string().describe("Website URL or domain, e.g. https://example.com") }),
       },
       async ({ url }) => {
