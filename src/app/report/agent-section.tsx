@@ -16,9 +16,17 @@ type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: 
 
 /**
  * Sends an AI agent to try a few real tasks on the site, after the static report has rendered.
- * `onReport` receives the site re-scored with the agent's results.
+ * `onReport` receives the site re-scored with the agent's results; `onSettled` fires when the run ends either way.
  */
-export function AgentSection({ url, onReport }: { url: string; onReport?: (report: Report) => void }) {
+export function AgentSection({
+  url,
+  onReport,
+  onSettled,
+}: {
+  url: string;
+  onReport?: (report: Report) => void;
+  onSettled?: () => void;
+}) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
@@ -38,6 +46,9 @@ export function AgentSection({ url, onReport }: { url: string; onReport?: (repor
       })
       .catch((err: unknown) => {
         if (!cancelled) setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      })
+      .finally(() => {
+        if (!cancelled) onSettled?.();
       });
     return () => {
       cancelled = true;

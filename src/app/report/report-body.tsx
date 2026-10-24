@@ -6,6 +6,7 @@ import { CATEGORY_ORDER } from "@/lib/audit/rubric";
 import type { Category, CheckResult, Report } from "@/lib/audit/types";
 import { ScoreRing, StatusRow, TONE, toneFor, type Tone } from "../ui";
 import { AgentSection } from "./agent-section";
+import { FixLinkButton } from "./fix-link-button";
 
 // Plain-language versions of the A-F rubric labels in src/lib/audit/rubric.ts.
 const PLAIN_LABELS: Record<Category, string> = {
@@ -41,6 +42,7 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
  */
 export function ReportBody({ initialReport }: { initialReport: Report & { score: number } }) {
   const [report, setReport] = useState(initialReport);
+  const [agentDone, setAgentDone] = useState(false);
   const cookies = report.checks.filter((c) => c.group === "cookies");
 
   return (
@@ -141,7 +143,13 @@ export function ReportBody({ initialReport }: { initialReport: Report & { score:
         </section>
       )}
 
-      <AgentSection url={report.url} onReport={(r) => r.score != null && setReport(r as Report & { score: number })} />
+      <AgentSection
+        url={report.url}
+        onReport={(r) => r.score != null && setReport(r as Report & { score: number })}
+        onSettled={() => setAgentDone(true)}
+      />
+
+      <FixLinkButton url={report.url} ready={agentDone} />
     </>
   );
 }
