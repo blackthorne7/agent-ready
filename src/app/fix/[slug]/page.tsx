@@ -25,7 +25,7 @@ export default async function FixPage({ params }: Props) {
 
   const host = new URL(link.audit.url).hostname;
   // Every fix, not just the report's top few: the fix link is sold as the complete list.
-  const items = rankFixes(link.audit.checks, link.audit.tasks, Infinity);
+  const items = rankFixes(link.audit.checks, link.audit.tasks, Infinity, link.audit.businessType);
   const after = scoreIfFixed(
     link.audit.checks,
     items.map((i) => i.id),

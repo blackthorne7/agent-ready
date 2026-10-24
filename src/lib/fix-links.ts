@@ -62,7 +62,7 @@ export interface FixLink {
   jsonLd: string;
   robotsTxt: string;
   mcpManifest: string;
-  audit: { url: string; score: number; grade: string; auditedAt: string; checks: CheckResult[]; tasks: TaskRun[] };
+  audit: { url: string; score: number; grade: string; auditedAt: string; checks: CheckResult[]; tasks: TaskRun[]; businessType?: string };
 }
 
 export async function getFixLink(slug: string): Promise<FixLink | null> {
@@ -70,7 +70,7 @@ export async function getFixLink(slug: string): Promise<FixLink | null> {
   if (!db || !/^[a-z0-9]{4,32}$/.test(slug)) return null;
   const { data, error } = await db
     .from("fix_links")
-    .select("slug, created_at, llms_txt, json_ld, robots_txt, mcp_manifest, audits(url, score, grade, audited_at, checks, tasks)")
+    .select("slug, created_at, llms_txt, json_ld, robots_txt, mcp_manifest, audits(url, score, grade, audited_at, checks, tasks, businesses(business_type))")
     .eq("slug", slug)
     .maybeSingle();
   if (error) {
@@ -79,6 +79,7 @@ export async function getFixLink(slug: string): Promise<FixLink | null> {
   }
   const audit = Array.isArray(data?.audits) ? data.audits[0] : data?.audits;
   if (!data || !audit) return null;
+  const business = Array.isArray(audit.businesses) ? audit.businesses[0] : audit.businesses;
   return {
     slug: data.slug,
     createdAt: data.created_at,
@@ -93,6 +94,7 @@ export async function getFixLink(slug: string): Promise<FixLink | null> {
       auditedAt: audit.audited_at,
       checks: audit.checks,
       tasks: audit.tasks ?? [],
+      businessType: business?.business_type ?? undefined,
     },
   };
 }

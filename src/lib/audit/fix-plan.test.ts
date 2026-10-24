@@ -56,6 +56,19 @@ describe("rankFixes", () => {
     assert.doesNotMatch(llms.fix, /generate_fixes/);
     assert.match(llms.fix, /llms\.txt/);
   });
+
+  it("puts what matters for the business type first, then points", () => {
+    const checks = [...CHECKS, check("offerings", "A", 1, 2), check("feeds", "A", 1, 2)];
+    assert.deepEqual(
+      rankFixes(checks, [], 8, "restaurant").map((i) => i.id),
+      ["offerings", "a-big", "b-small", "feeds"],
+    );
+    assert.deepEqual(
+      rankFixes(checks, [], 8, "media").map((i) => i.id),
+      ["feeds", "a-big", "b-small", "offerings"],
+    );
+    assert.equal(rankFixes(checks, [], 8, "other")[0].id, "a-big");
+  });
 });
 
 describe("buildFixPrompt", () => {
