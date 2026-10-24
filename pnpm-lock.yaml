@@ -14,6 +14,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: ^2.4.0
         version: 2.4.0
+      '@omnara/sdk':
+        specifier: 0.1.37
+        version: 0.1.37
       '@supabase/supabase-js':
         specifier: ^2.118.0
         version: 2.118.0(@opentelemetry/api@1.10.0)
@@ -558,6 +561,15 @@ packages:
   '@nolyfill/is-core-module@1.0.39':
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
+
+  '@omnara/sdk@0.1.37':
+    resolution: {integrity: sha512-DTJZmdL+K1LRMBqqwowF9hEjyJCzcx11+6Gh+TTJHDX14SoRdfPrEZGhRWCRIZegEfppi4Zi8fV/JzN0SsyqLw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      '@tanstack/react-query': ^5.59.0
+    peerDependenciesMeta:
+      '@tanstack/react-query':
+        optional: true
 
   '@opentelemetry/api@1.10.0':
     resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
@@ -2558,6 +2570,10 @@ snapshots:
       fastq: 1.20.3
 
   '@nolyfill/is-core-module@1.0.39': {}
+
+  '@omnara/sdk@0.1.37':
+    dependencies:
+      zod: 4.6.7
 
   '@opentelemetry/api@1.10.0': {}
 
