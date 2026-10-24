@@ -37,6 +37,23 @@ const DEVELOPER_CHECKS = new Set([
   "cookie-security",
 ]);
 
+// What matters most for each business type (business_types slugs in supabase/schema.sql), most
+// important first. These checks go to the top of the list when failing; the rest follow by points.
+const LOCAL_FIRST = ["business-info", "contact", "actions", "offerings", "forms-labeled", "structured-data"];
+const FIRST_BY_TYPE: Record<string, string[]> = {
+  restaurant: ["offerings", "business-info", "actions", "contact", "structured-data"],
+  cafe: ["offerings", "business-info", "actions", "contact", "structured-data"],
+  retail: ["offerings", "search-in-url", "actions", "structured-data", "business-info"],
+  auto_shop: LOCAL_FIRST,
+  salon: LOCAL_FIRST,
+  clinic: LOCAL_FIRST,
+  gym: LOCAL_FIRST,
+  home: LOCAL_FIRST,
+  tech: ["agent-protocols", "server-rendered", "llms-txt", "offerings", "forms-labeled"],
+  media: ["server-rendered", "feeds", "heading-order", "structured-data", "sitemap"],
+  government: ["contact", "business-info", "forms-labeled", "heading-order", "server-rendered"],
+};
+
 function totalScore(checks: CheckResult[]): number {
   const categories = Object.fromEntries(CATEGORY_ORDER.map((c) => [c, scoreCategory(c, checks)])) as Record<
     Category,
@@ -78,16 +95,19 @@ function agentFindings(tasks: TaskRun[]): FixItem[] {
 
 /**
  * What to fix, most useful first: the tasks our AI agent got stuck on (when `tasks` are given),
- * then failing or needs-work checks that have a fix, biggest score gain first.
+ * then failing or needs-work checks that have a fix: what matters most for the business type first,
+ * then biggest score gain.
  */
-export function rankFixes(checks: CheckResult[], tasks: TaskRun[] = [], limit = 8): FixItem[] {
+export function rankFixes(checks: CheckResult[], tasks: TaskRun[] = [], limit = 8, businessType?: string): FixItem[] {
   const base = totalScore(checks);
+  const first = FIRST_BY_TYPE[businessType ?? ""] ?? [];
+  const priority = (id: string) => (first.includes(id) ? first.indexOf(id) : first.length);
   const fromChecks = (
     checks
       // Task checks record agent outcomes, not something to change; their causes show up in other checks.
       .filter((c) => c.fix && c.method !== "task" && (c.status === "fail" || c.status === "warn") && c.score != null)
       .map((check) => ({ check, points: Math.max(0, scoreIfFixed(checks, [check.id]) - base) }))
-      .sort((a, b) => b.points - a.points || b.check.weight - a.check.weight)
+      .sort((a, b) => priority(a.check.id) - priority(b.check.id) || b.points - a.points || b.check.weight - a.check.weight)
       .map(({ check: c, points }) => ({
         id: c.id,
         category: c.category,

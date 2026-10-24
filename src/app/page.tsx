@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import { paywallEnabled } from "@/lib/payments";
 import { FIX_LINK_PRICE_LABEL } from "@/lib/pricing";
 import { AuditForm } from "./audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow } from "./ui";
@@ -53,10 +54,11 @@ const plans = [
   {
     name: "Fix link",
     price: FIX_LINK_PRICE_LABEL,
-    per: "one time, per website",
+    per: "per report",
     body: "Export every fix to your AI website builder in one link.",
     features: [
       "Everything in the free score",
+      "Re-check for free if nothing changed",
       "Every fix, ranked by impact",
       "One prompt your builder's AI follows to make the changes",
       "Ready-made files: llms.txt, structured data, robots.txt",
@@ -74,6 +76,7 @@ const asks = [
 ];
 
 export default async function Home() {
+  const paywall = paywallEnabled();
   const host = (await headers()).get("host") ?? "localhost:3000";
   const origin = `${host.startsWith("localhost") ? "http" : "https"}://${host}`;
 
@@ -243,7 +246,11 @@ export default async function Home() {
               </div>
             ))}
           </div>
-          <p className="text-[15px] text-muted">Fix links are free while payments are being set up.</p>
+          <p className="text-[15px] text-muted">
+            {paywall
+              ? "Demo: checkout runs in Stripe test mode, so no real money is charged. Pay with card 4242 4242 4242 4242, any future date and any CVC."
+              : "Fix links are free while payments are being set up."}
+          </p>
         </section>
       </main>
 

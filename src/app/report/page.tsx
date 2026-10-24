@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { runAudit } from "@/lib/audit";
 import { logoUrl } from "@/lib/context-dev";
+import { FIX_LINK_PRICE_LABEL, paywallEnabled } from "@/lib/payments";
 import { AuditForm } from "../audit-form";
 import { BlockedReport } from "./blocked-report";
 import { SiteFooter, SiteHeader } from "../ui";
@@ -9,7 +10,8 @@ import { AgentEvaluationProgress } from "./AgentEvaluationProgress";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ url?: string; demo?: string }> };
+// checkout: the Stripe Checkout Session id Stripe adds when it sends the visitor back after paying.
+type Props = { searchParams: Promise<{ url?: string; demo?: string; checkout?: string }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { url } = await searchParams;
@@ -17,7 +19,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 }
 
 export default async function ReportPage({ searchParams }: Props) {
-  const { url, demo } = await searchParams;
+  const { url, demo, checkout } = await searchParams;
   if (demo === "1") {
     return (
       <div className="text-[17px] leading-[1.55]">
@@ -67,7 +69,11 @@ export default async function ReportPage({ searchParams }: Props) {
                 .
               </p>
             </noscript>
-            <ReportBody checklistReport={{ ...report, score: report.score }} logoSrc={logoUrl(new URL(report.url).hostname.replace(/^www\./, ""))} />
+            <ReportBody
+              checklistReport={{ ...report, score: report.score }}
+              logoSrc={logoUrl(new URL(report.url).hostname.replace(/^www\./, ""))}
+              payment={{ required: paywallEnabled(), priceLabel: FIX_LINK_PRICE_LABEL, checkout }}
+            />
           </>
         )}
       </main>

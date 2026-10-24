@@ -9,7 +9,7 @@ import { SiteLogo } from "../site-logo";
 import { ScoreRing, TONE, toneFor, type Tone } from "../ui";
 import { AgentEvaluationProgress, type EvaluationStage } from "./AgentEvaluationProgress";
 import { AgentStrip, useAgentRun } from "./agent-section";
-import { FixLinkBanner, FixLinkRepeat, useFixLink } from "./fix-link-button";
+import { FixLinkBanner, FixLinkRepeat, useFixLink, type Payment } from "./fix-link-button";
 import { AREAS, TASK_CHECK, TASK_STUCK, goodFor, todoFor, whyFor } from "./plain";
 
 const TOP_FIXES = 3;
@@ -86,18 +86,26 @@ function WorkingList({ checks }: { checks: CheckResult[] }) {
  * The scored part of the report. Shows one score: the final one, after the agent has tried the site
  * and /api/agent has re-scored and saved it. The progress card covers the wait.
  */
-export function ReportBody({ checklistReport, logoSrc = null }: { checklistReport: Report & { score: number }; logoSrc?: string | null }) {
+export function ReportBody({
+  checklistReport,
+  logoSrc = null,
+  payment,
+}: {
+  checklistReport: Report & { score: number };
+  logoSrc?: string | null;
+  payment?: Payment;
+}) {
   const [finalReport, setFinalReport] = useState<(Report & { score: number }) | null>(null);
   const agent = useAgentRun(checklistReport.url, (r) => r.score != null && setFinalReport(r as Report & { score: number }));
   // The fix link reads the saved final audit, which is stored under the final report's URL.
-  const fixLink = useFixLink(finalReport?.url ?? checklistReport.url);
+  const fixLink = useFixLink(finalReport?.url ?? checklistReport.url, payment);
   if (agent.kind === "loading") return <AgentEvaluationProgress mode="live" stages={AGENT_STAGES} />;
 
   // The checklist-only report is a fallback for when the /api/agent request itself fails.
   const report = finalReport ?? checklistReport;
 
   const areas = areaScores(report);
-  const fixes = rankFixes(report.checks);
+  const fixes = rankFixes(report.checks, [], 8, report.business.businessType);
   const top = fixes.slice(0, TOP_FIXES);
   const more = fixes.slice(TOP_FIXES);
   const quotes = agentQuotes(top, agent.kind === "done" ? agent.tasks : []);
