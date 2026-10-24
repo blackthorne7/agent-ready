@@ -1,21 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
+  weight: ["500", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "Agent Ready: is your website ready for AI agents?",
+  title: "Agent Ready: can AI read your website?",
   description:
-    "Audit any website for AI agent readiness. See whether agents like Claude can access, understand and act on your site (hours, menus, ordering), with a score and copy-paste fixes. Also available as an MCP server.",
+    "Your next customer is asking AI where to go. Get a free score showing whether AI assistants can find your business, understand what you sell, and book or order for your customers, plus a fix link you paste into your website builder.",
   openGraph: {
     title: "Agent Ready",
     description: "Lighthouse for AI agents. Score your site and get fixes.",
@@ -48,7 +49,7 @@ export default function RootLayout({
         <link rel="mcp" href="/api/mcp" />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
+      <body className={`${inter.variable} ${spaceGrotesk.variable} antialiased`}>{children}</body>
     </html>
   );
 }
