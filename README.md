@@ -31,7 +31,17 @@ pnpm install
 pnpm dev
 ```
 
-Checks live in `src/lib/audit/checks.ts`. Each check is a `{ id, category, title, weight, run(ctx) }` object, so adding one is a single array entry.
+Checks live in `src/lib/audit/checks.ts`, one entry per line of `evals/AGENT_CHECKS.md`. Each is a `{ id, category, title, weight, method, run(ctx) }` object, so adding one is a single array entry.
+
+- **Categories** A–F and their weights (15/20/25/15/15/10) are in `src/lib/audit/rubric.ts`.
+- **Ratings** are 0–4, or `na` (doesn't apply) or `unknown` (not measured). Unknown lowers coverage, never the score.
+- **Methods:** `code` checks read the HTML; `task` checks use agent runs; `browser` checks have no `run()` yet and need Playwright.
+- **Score** = Σ(weight × rating/4) / Σweight per category, then categories weighted together. A category counts only once 25% of it is measured. Bot-walled sites get no score.
+
+```bash
+pnpm test                                       # scoring + check unit tests
+AGENT_STUB=1 pnpm evaluate https://example.com  # agent tasks + audit, saves reports/*.json
+```
 
 ## Agent runner
 
@@ -42,7 +52,7 @@ AGENT_STUB=1 pnpm agent https://example.com "find pricing"   # fake steps, no mo
 pnpm agent https://example.com "book a demo"                 # needs ANTHROPIC_API_KEY
 ```
 
-Env vars are listed in `.env.example`. Supabase tables: `lib/agent/schema.sql`. `lib/page.ts` is still a stub serving a fake site.
+Env vars are listed in `.env.example`. Supabase tables: `lib/agent/schema.sql` (`agent_runs`, `agent_steps`, `audit_reports`). `lib/page.ts` is still a stub serving a fake site, so task results don't reflect the real URL yet.
 
 ## Deploy (Unikraft Cloud)
 
