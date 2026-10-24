@@ -7,6 +7,7 @@ import { getFixLink } from "@/lib/fix-links";
 import { SiteLogo } from "../../site-logo";
 import { ScoreRing, SiteFooter, SiteHeader, TONE, toneFor } from "../../ui";
 import { CopyButton } from "./copy-button";
+import { TechnicalDetails } from "./technical-details";
 
 export const dynamic = "force-dynamic";
 
@@ -114,6 +115,8 @@ export default async function FixPage({ params }: Props) {
             </section>
           </>
         )}
+
+        <TechnicalDetails checks={link.audit.checks} />
 
         <p className="text-[15px] text-muted">
           Based on our check on {new Date(link.audit.auditedAt).toUTCString()}. Made your changes?{" "}
