@@ -41,6 +41,8 @@ export async function saveAudit(report: Report): Promise<void> {
         understand_score: report.categories.B.score ?? 0,
         act_score: report.categories.C.score ?? 0,
         checks: report.checks,
+        // The agent's task results, so fix plans can lead with what it actually got stuck on.
+        tasks: report.tasks,
         audited_at: report.auditedAt,
       })
       .abortSignal(AbortSignal.timeout(TIMEOUT_MS));

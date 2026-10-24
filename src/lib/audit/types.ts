@@ -31,11 +31,15 @@ export type TaskStatus = "success" | "failed" | "blocked" | "error";
 /** One agent attempt at a task, produced by lib/agent and fed into task checks. */
 export interface TaskRun {
   taskId: string;
+  /** Short name, e.g. "Find contact details". */
+  title?: string;
   goal: string;
   status: TaskStatus;
   steps: number;
   maxSteps: number;
   reason: string;
+  /** The agent's own suggestion for what would have let it succeed. */
+  fix?: string;
 }
 
 export interface AuditContext {

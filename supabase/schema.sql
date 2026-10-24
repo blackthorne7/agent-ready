@@ -66,6 +66,7 @@ create table if not exists audits (
   understand_score integer not null,               -- "Can agents understand it?"
   act_score        integer not null,               -- "Can agents take action?"
   checks           jsonb not null default '[]',    -- CheckResult[] from the audit
+  tasks            jsonb not null default '[]',    -- TaskRun[]: the AI agent's task results
   error            text,                           -- set when the site couldn't be loaded
   audited_at       timestamptz not null default now()
 );
@@ -165,3 +166,6 @@ create policy "public read fix links"  on fix_links      for select using (true)
 -- A business's score over time:
 --   select audited_at, score from audits a join businesses b on b.id = a.business_id
 --   where b.domain = 'joespizza.com' order by audited_at;
+
+-- Added after launch: run on existing databases.
+alter table audits add column if not exists tasks jsonb not null default '[]';

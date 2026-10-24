@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildFixPrompt, rankFixes, scoreIfFixed } from "./fix-plan";
-import type { Category, CheckResult } from "./types";
+import type { Category, CheckResult, TaskRun } from "./types";
 
 function check(id: string, category: Category, weight: number, rating: 0 | 1 | 2 | 3 | 4, extra: Partial<CheckResult> = {}): CheckResult {
   return {
@@ -69,5 +69,52 @@ describe("buildFixPrompt", () => {
     assert.match(prompt, /https:\/\/joes\.test\b/);
     assert.ok(prompt.indexOf("1. Title a-big") < prompt.indexOf("2. Title b-small"));
     for (const part of ["# Joe's", '{"@type":"Restaurant"}', "User-agent: *"]) assert.ok(prompt.includes(part), part);
+  });
+});
+
+const task = (taskId: string, status: TaskRun["status"], extra: Partial<TaskRun> = {}): TaskRun => ({
+  taskId,
+  title: `Do ${taskId}`,
+  goal: `Goal ${taskId}`,
+  status,
+  steps: 3,
+  maxSteps: 10,
+  reason: `Reason ${taskId}`,
+  ...extra,
+});
+
+describe("agent findings and developer fixes", () => {
+  it("puts tasks the agent got stuck on first, with its own fix", () => {
+    const items = rankFixes(CHECKS, [
+      task("ok", "success"),
+      task("stuck", "failed", { fix: "Add a plain mailto: link." }),
+      task("wall", "blocked"),
+      task("broke", "error"),
+    ]);
+    assert.deepEqual(
+      items.slice(0, 2).map((i) => [i.id, i.source]),
+      [
+        ["agent-stuck", "agent"],
+        ["agent-wall", "agent"],
+      ],
+    );
+    assert.equal(items[0].fix, "Add a plain mailto: link.");
+    assert.match(items[0].title, /Do stuck/);
+    assert.ok(items[1].fix.length > 0); // a default when the agent gave none
+    assert.ok(!items.some((i) => i.id === "agent-ok" || i.id === "agent-broke"));
+  });
+
+  it("flags developer-only fixes and gives them their own section in the prompt", () => {
+    const checks = [...CHECKS, check("agent-protocols", "D", 2, 0, { title: "Agent endpoint" })];
+    const items = rankFixes(checks);
+    assert.equal(items.find((i) => i.id === "agent-protocols")?.developer, true);
+    assert.equal(items.find((i) => i.id === "a-big")?.developer, false);
+
+    const prompt = buildFixPrompt("https://joes.test/", items, { llmsTxt: "", jsonLd: "{}", robotsTxt: "" });
+    const devSection = prompt.indexOf("## For a developer");
+    assert.ok(devSection > 0);
+    assert.ok(prompt.indexOf("Agent endpoint") > devSection);
+    assert.ok(prompt.indexOf("Title a-big") < devSection);
+    assert.match(prompt, /never publish the word TODO/);
   });
 });

@@ -24,7 +24,7 @@ export default async function FixPage({ params }: Props) {
   if (!link) notFound();
 
   const host = new URL(link.audit.url).hostname;
-  const items = rankFixes(link.audit.checks);
+  const items = rankFixes(link.audit.checks, link.audit.tasks);
   const after = scoreIfFixed(
     link.audit.checks,
     items.map((i) => i.id),
@@ -87,12 +87,21 @@ export default async function FixPage({ params }: Props) {
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="font-semibold">
                         {i + 1}. {it.title}
+                        {(it.source === "agent" || it.developer) && (
+                          <span className="ml-2 inline-flex gap-1.5 align-middle">
+                            {it.source === "agent" && (
+                              <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs font-semibold text-accent-text">Found by our AI agent</span>
+                            )}
+                            {it.developer && <span className="rounded-full bg-band px-2.5 py-0.5 text-xs font-semibold text-muted">Needs a developer</span>}
+                          </span>
+                        )}
                       </h3>
                       {it.points > 0 && (
                         <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${TONE.good.bg} ${TONE.good.text}`}>+{it.points} {it.points === 1 ? "point" : "points"}</span>
                       )}
                     </div>
                     <p className="mt-1 text-muted">{it.detail}</p>
+                    {it.source === "agent" && <p className="mt-1 text-[15px]">Suggested fix: {it.fix}</p>}
                   </li>
                 ))}
               </ol>
@@ -100,7 +109,7 @@ export default async function FixPage({ params }: Props) {
 
             <section className="flex flex-col gap-3">
               <h2 className="font-display text-[26px] font-bold tracking-[-0.02em]">The files, if you&apos;re doing it by hand</h2>
-              <p className="-mt-1 text-[15px] text-muted">Already included in the instructions above. Replace every TODO with your real details.</p>
+              <p className="-mt-1 text-[15px] text-muted">Already included in the instructions above. Replace each TODO with your real details, or delete that line if it doesn&apos;t apply.</p>
               {files.map((f) => (
                 <details key={f.name} className="rounded-[20px] border border-border bg-card p-5">
                   <summary className="cursor-pointer font-semibold">

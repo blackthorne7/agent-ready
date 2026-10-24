@@ -49,13 +49,15 @@ export async function runAgentTasks(url: string, tasks: AgentTask[] = AGENT_TASK
 }
 
 /** The shape the audit's task-based rubric checks score (runAudit's `tasks` option). */
-export function toTaskRun(run: Pick<AgentTaskRun, "id" | "task" | "steps" | "result">): TaskRun {
+export function toTaskRun(run: Pick<AgentTaskRun, "id" | "title" | "task" | "steps" | "result">): TaskRun {
   return {
     taskId: run.id,
+    title: run.title,
     goal: run.task,
     status: run.result.status,
     steps: run.steps.length,
     maxSteps: AGENT_MAX_STEPS,
     reason: run.result.reason,
+    fix: run.result.suggestedFix,
   };
 }
