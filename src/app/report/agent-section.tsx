@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Report } from "@/lib/audit/types";
 import type { AgentTaskRun } from "../../../lib/agent/tasks";
 import { TONE, type Tone } from "../ui";
 
@@ -11,10 +12,13 @@ const STATUS: Record<AgentTaskRun["result"]["status"], { tone: Tone; label: stri
   error: { tone: "warn", label: "Didn't finish" },
 };
 
-type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "done"; tasks: AgentTaskRun[] };
+type State = { kind: "loading" } | { kind: "error"; message: string } | { kind: "done"; tasks: AgentTaskRun[]; rescored: boolean };
 
-/** Sends an AI agent to try a few real tasks on the site, after the static report has rendered. */
-export function AgentSection({ url }: { url: string }) {
+/**
+ * Sends an AI agent to try a few real tasks on the site, after the static report has rendered.
+ * `onReport` receives the site re-scored with the agent's results.
+ */
+export function AgentSection({ url, onReport }: { url: string; onReport?: (report: Report) => void }) {
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
@@ -28,7 +32,9 @@ export function AgentSection({ url }: { url: string }) {
       .then(async (res) => {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
-        if (!cancelled) setState({ kind: "done", tasks: body.tasks });
+        if (cancelled) return;
+        setState({ kind: "done", tasks: body.tasks, rescored: body.report?.score != null });
+        if (body.report) onReport?.(body.report);
       })
       .catch((err: unknown) => {
         if (!cancelled) setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
@@ -36,7 +42,7 @@ export function AgentSection({ url }: { url: string }) {
     return () => {
       cancelled = true;
     };
-  }, [url]);
+  }, [url]); // eslint-disable-line react-hooks/exhaustive-deps -- run once per URL, not when the parent re-renders
 
   return (
     <section className="flex flex-col gap-3">
@@ -48,7 +54,7 @@ export function AgentSection({ url }: { url: string }) {
 
       {state.kind === "loading" && (
         <div className="rounded-[20px] border border-border bg-card p-5 text-muted">
-          The agent is working on the site. This usually takes under a minute…
+          The agent is working on the site. This usually takes under a minute, and the score above updates when it&apos;s done…
         </div>
       )}
 
@@ -56,6 +62,10 @@ export function AgentSection({ url }: { url: string }) {
         <div role="alert" className="rounded-[20px] bg-bad-bg p-5">
           The agent couldn&apos;t run: {state.message}
         </div>
+      )}
+
+      {state.kind === "done" && state.rescored && (
+        <p className="text-[15px] text-muted">The score above now includes these results.</p>
       )}
 
       {state.kind === "done" &&

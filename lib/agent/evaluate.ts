@@ -12,7 +12,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { CATEGORY_ORDER, runAudit, type TaskRun } from "../../src/lib/audit";
 import { saveReport } from "./persist";
 import { runAgent } from "./run";
-import { AGENT_TASKS } from "./tasks";
+import { AGENT_MAX_STEPS, AGENT_TASKS, toTaskRun } from "./tasks";
 
 try {
   process.loadEnvFile(); // optional .env in the project root
@@ -21,7 +21,6 @@ try {
 }
 
 // Task ids starting with "search" or "multistep" also feed those checks.
-const MAX_STEPS = 10;
 
 async function main() {
   const [url, runsArg] = process.argv.slice(2);
@@ -35,9 +34,9 @@ async function main() {
   const runIds: string[] = [];
   for (const t of AGENT_TASKS) {
     for (let i = 0; i < runs; i++) {
-      const { runId, steps, result } = await runAgent({ url, task: t.task, maxSteps: MAX_STEPS });
+      const { runId, steps, result } = await runAgent({ url, task: t.task, maxSteps: AGENT_MAX_STEPS });
       runIds.push(runId);
-      tasks.push({ taskId: t.id, goal: t.task, status: result.status, steps: steps.length, maxSteps: MAX_STEPS, reason: result.reason });
+      tasks.push(toTaskRun({ ...t, steps, result }));
     }
   }
 

@@ -1,8 +1,11 @@
 // The tasks the agent attempts on every audited site, run in parallel.
 // Kept generic so they apply to SaaS, shops, restaurants and local businesses alike.
 
+import type { TaskRun } from "../../src/lib/audit/types";
 import type { AgentResult, AgentStep } from "../types";
 import { runAgent } from "./run";
+
+export const AGENT_MAX_STEPS = 10;
 
 export interface AgentTask {
   id: string;
@@ -39,8 +42,20 @@ export interface AgentTaskRun extends AgentTask {
 export async function runAgentTasks(url: string, tasks: AgentTask[] = AGENT_TASKS): Promise<AgentTaskRun[]> {
   return Promise.all(
     tasks.map(async (t) => {
-      const { runId, steps, result } = await runAgent({ url, task: t.task });
+      const { runId, steps, result } = await runAgent({ url, task: t.task, maxSteps: AGENT_MAX_STEPS });
       return { ...t, runId, steps, result };
     }),
   );
+}
+
+/** The shape the audit's task-based rubric checks score (runAudit's `tasks` option). */
+export function toTaskRun(run: Pick<AgentTaskRun, "id" | "task" | "steps" | "result">): TaskRun {
+  return {
+    taskId: run.id,
+    goal: run.task,
+    status: run.result.status,
+    steps: run.steps.length,
+    maxSteps: AGENT_MAX_STEPS,
+    reason: run.result.reason,
+  };
 }
