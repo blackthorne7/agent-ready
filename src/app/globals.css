@@ -10,6 +10,8 @@
   --border: #2c2c2e;
   --border-strong: #3a3a3c;
   --accent: #0a84ff;
+  /* Darker blue for white text on large filled areas (5.2:1). */
+  --accent-strong: #2563eb;
   --accent-soft: #0a2540;
   --accent-text: #64b5ff;
   --good: #30d158;
@@ -29,6 +31,7 @@
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
   --color-accent-text: var(--accent-text);
   --color-good: var(--good);
