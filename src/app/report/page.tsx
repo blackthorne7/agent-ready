@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { CATEGORY_ORDER, runAudit, type CheckResult } from "@/lib/audit";
+import { CATEGORY_ORDER, runAudit, type Category, type CheckResult } from "@/lib/audit";
 import { AuditForm } from "../audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow, TONE, toneFor, type Tone } from "../ui";
 
@@ -13,38 +12,38 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   return { title: url ? `Agent readiness report: ${url}` : "Agent readiness report" };
 }
 
-const STATUS_STYLE: Record<CheckResult["status"], { label: string; className: string }> = {
-  pass: { label: "Pass", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
-  warn: { label: "Improve", className: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
-  fail: { label: "Fail", className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
-  na: { label: "N/A", className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400" },
-  unknown: { label: "Not measured yet", className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400" },
+// Plain-language versions of the A-F rubric labels in src/lib/audit/rubric.ts.
+const PLAIN_LABELS: Record<Category, string> = {
+  A: "Can AI find and read you?",
+  B: "Can AI understand your buttons and forms?",
+  C: "Can AI finish tasks for customers?",
+  D: "Can AI connect to you directly?",
+  E: "Does it work reliably for AI?",
+  F: "Is it safe for AI to use?",
 };
 
-function pct(n: number) {
-  return `${Math.round(n * 100)}%`;
-}
+const CATEGORY_DETAIL: Record<Tone, string> = {
+  good: "In good shape.",
+  warn: "Some things to fix below.",
+  bad: "Needs fixing, see below.",
+};
 
-function scoreColor(score: number | null) {
-  if (score == null) return "text-muted";
-  if (score >= 75) return "text-emerald-600";
-  if (score >= 50) return "text-amber-600";
-  return "text-red-600";
-}
+const NEUTRAL = "bg-band text-muted";
+
+const CHECK_TONE: Record<CheckResult["status"], { className: string; label: string }> = {
+  pass: { className: `${TONE.good.bg} ${TONE.good.text}`, label: "Good" },
+  warn: { className: `${TONE.warn.bg} ${TONE.warn.text}`, label: "Needs work" },
+  fail: { className: `${TONE.bad.bg} ${TONE.bad.text}`, label: "Fix this" },
+  na: { className: NEUTRAL, label: "Doesn't apply" },
+  unknown: { className: NEUTRAL, label: "Not checked yet" },
+};
+
+const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 export default async function ReportPage({ searchParams }: Props) {
   const { url } = await searchParams;
-  if (!url) {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-16">
-        <AuditForm />
-      </main>
-    );
-  }
-
-  const report = await runAudit(url);
-  const order = CATEGORY_ORDER;
-  const cookies = report.checks.filter((c) => c.group === "cookies");
+  const report = url ? await runAudit(url) : null;
+  const cookies = report?.checks.filter((c) => c.group === "cookies") ?? [];
 
   return (
     <div className="text-[17px] leading-[1.55]">
@@ -54,138 +53,126 @@ export default async function ReportPage({ searchParams }: Props) {
         <div id="check">
           <AuditForm defaultValue={url ?? ""} />
         </div>
-      ) : (
-        <>
-          <header className="flex flex-col gap-6 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center">
-            <div className="flex items-baseline gap-2">
-              <span className={`text-6xl font-semibold tabular-nums ${scoreColor(report.score)}`}>{report.score ?? "—"}</span>
-              <span className="text-muted">/ 100</span>
-              <span className={`ml-2 text-3xl font-semibold ${scoreColor(report.score)}`}>{report.grade}</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-lg font-medium">{report.url}</h1>
-              <p className="text-sm text-muted">Audited {new Date(report.auditedAt).toUTCString()}</p>
-              {report.evaluationStatus === "blocked_by_site" && (
-                <p className="mt-1 text-sm text-red-600">
-                  The site served a bot challenge instead of its content, so it couldn&apos;t be scored. This is not the same as a low score.
-                </p>
-              )}
-              <p className="mt-1 text-sm text-muted">
-                Coverage {pct(report.coverage)} of the rubric measured
-                {report.taskSuccessRate != null ? ` · Agent tasks ${pct(report.taskSuccessRate)} succeeded` : " · No agent tasks run"}
-              </p>
-            </div>
-          </header>
 
-          <section className="grid gap-3 sm:grid-cols-3">
-            {order.map((cat) => (
-              <div key={cat} className="rounded-xl border border-border bg-card p-4">
-                <p className="text-sm text-muted">
-                  {cat}. {report.categories[cat].label}
-                </p>
-                <p className={`mt-1 text-2xl font-semibold tabular-nums ${scoreColor(report.categories[cat].score)}`}>
-                  {report.categories[cat].score ?? "—"}
-                </p>
-                <p className="text-xs text-muted">
-                  {report.categories[cat].weight} pts · {pct(report.categories[cat].coverage)} measured
-                  {report.categories[cat].score != null && !report.categories[cat].countedInTotal && " · too little measured to count"}
-                </p>
+        {report?.error && (
+          <div role="alert" className="rounded-2xl bg-bad-bg p-6">
+            <h1 className="font-display text-2xl font-bold">Couldn&apos;t check {report.url}</h1>
+            <p className="mt-1 text-muted">{report.error}</p>
+          </div>
+        )}
+
+        {report?.evaluationStatus === "blocked_by_site" && (
+          <div role="alert" className="rounded-2xl bg-warn-bg p-6">
+            <h1 className="font-display text-2xl font-bold">{new URL(report.url).hostname} blocked our check</h1>
+            <p className="mt-1 text-muted">
+              The site showed a bot challenge instead of its content, so it couldn&apos;t be scored. That isn&apos;t the same as a low score, but AI
+              assistants are likely blocked the same way.
+            </p>
+          </div>
+        )}
+
+        {report && report.score != null && (
+          <>
+            <section className="flex flex-wrap items-center gap-10 rounded-3xl border border-border bg-card p-8">
+              <ScoreRing score={report.score} caption={`Grade ${report.grade}`} />
+              <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4">
+                <div>
+                  <h1 className="truncate font-display text-[28px] font-bold">{new URL(report.url).hostname}</h1>
+                  <p className="text-[15px] text-muted">Checked {new Date(report.auditedAt).toUTCString()}</p>
+                  <p className="text-[15px] text-muted">
+                    {pct(report.coverage)} of the checklist measured
+                    {report.taskSuccessRate != null ? ` · AI tasks ${pct(report.taskSuccessRate)} completed` : " · AI task tests not run"}
+                  </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  {CATEGORY_ORDER.map((cat) => {
+                    const c = report.categories[cat];
+                    if (c.score == null || !c.countedInTotal) {
+                      return (
+                        <div key={cat} className={`flex items-center justify-between gap-3.5 rounded-xl px-4 py-3.5 ${NEUTRAL}`}>
+                          <span>
+                            <strong className="text-foreground">{PLAIN_LABELS[cat]}</strong> Not enough measured yet.
+                          </span>
+                          <span className="flex-none font-bold">{pct(c.coverage)}</span>
+                        </div>
+                      );
+                    }
+                    const tone = toneFor(c.score);
+                    return <StatusRow key={cat} title={PLAIN_LABELS[cat]} detail={CATEGORY_DETAIL[tone]} tone={tone} label={`${c.score}/100`} />;
+                  })}
+                </div>
               </div>
             </section>
 
-            {ORDER.map((cat) => (
+            {CATEGORY_ORDER.map((cat) => (
               <section key={cat} className="flex flex-col gap-3">
                 <h2 className="font-display text-[28px] font-bold tracking-[-0.02em]">{PLAIN_LABELS[cat]}</h2>
+                <p className="-mt-2 text-[15px] text-muted">
+                  {report.categories[cat].weight} of 100 points · {pct(report.categories[cat].coverage)} measured
+                </p>
                 {report.checks
                   .filter((c) => c.category === cat)
                   .map((c) => {
-                    const { tone, label } = CHECK_TONE[c.status];
+                    const { className, label } = CHECK_TONE[c.status];
                     return (
                       <article key={c.id} className="rounded-[20px] border border-border bg-card p-5">
                         <div className="flex items-start justify-between gap-3">
                           <h3 className="font-semibold">{c.title}</h3>
-                          <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${TONE[tone].bg} ${TONE[tone].text}`}>{label}</span>
+                          <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${className}`}>{label}</span>
                         </div>
                         <p className="mt-1 text-muted">{c.detail}</p>
                         {c.fix && c.status !== "pass" && (
                           <pre className="mt-3 overflow-x-auto rounded-xl bg-band p-3 font-mono text-xs whitespace-pre-wrap text-foreground">{c.fix}</pre>
+                        )}
+                        {c.evidence && c.evidence.length > 0 && c.status !== "pass" && (
+                          <ul className="mt-2 list-disc pl-5 font-mono text-xs break-all text-muted">
+                            {c.evidence.map((e, i) => (
+                              <li key={i}>{e}</li>
+                            ))}
+                          </ul>
                         )}
                       </article>
                     );
                   })}
               </section>
             ))}
-          </>
-        )}
-      </main>
 
-          {order.map((cat) => (
-            <section key={cat} className="flex flex-col gap-3">
-              <h2 className="text-lg font-medium">
-                {cat}. {report.categories[cat].label}
-              </h2>
-              {report.checks
-                .filter((c) => c.category === cat)
-                .map((c) => (
-                  <article key={c.id} className="rounded-xl border border-border bg-card p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <h3 className="font-medium">{c.title}</h3>
-                      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[c.status].className}`}>
-                        {STATUS_STYLE[c.status].label}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm text-muted">{c.detail}</p>
-                    {c.fix && c.status !== "pass" && (
-                      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap rounded-lg bg-background p-3 font-mono text-xs">{c.fix}</pre>
-                    )}
-                    {c.evidence && c.evidence.length > 0 && c.status !== "pass" && (
-                      <ul className="mt-2 list-disc pl-5 font-mono text-xs text-muted">
-                        {c.evidence.map((e, i) => (
-                          <li key={i} className="break-all">
-                            {e}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </article>
-                ))}
-            </section>
-          ))}
-
-          <section className="flex flex-col gap-3">
-            <h2 className="text-lg font-medium">Cookies, consent &amp; sessions</h2>
-            <p className="text-sm text-muted">
-              No separate score: each of these already counts once toward the category shown.{" "}
-              {cookies.filter((c) => c.score != null).length} of {cookies.length} measured so far.
-            </p>
-            <ul className="flex flex-col gap-1 text-sm">
-              {cookies.map((c) => (
-                <li key={c.id} className="flex items-start justify-between gap-3">
-                  <span>
-                    {c.title} <span className="text-muted">({c.category})</span>
-                  </span>
-                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[c.status].className}`}>
-                    {STATUS_STYLE[c.status].label}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {report.diagnostics.length > 0 && (
             <section className="flex flex-col gap-3">
-              <h2 className="text-lg font-medium">Browser behaviors (recorded, not scored)</h2>
-              <ul className="flex flex-col gap-1 text-sm">
-                {report.diagnostics.map((d) => (
-                  <li key={d.id}>
-                    <span className="font-medium">{d.title}:</span> <span className="break-all text-muted">{d.detail}</span>
+              <h2 className="font-display text-[28px] font-bold tracking-[-0.02em]">Cookies, consent and sessions</h2>
+              <p className="-mt-2 text-[15px] text-muted">
+                No separate score: each of these already counts once in the section shown. {cookies.filter((c) => c.score != null).length} of{" "}
+                {cookies.length} measured so far.
+              </p>
+              <ul className="flex flex-col gap-2">
+                {cookies.map((c) => (
+                  <li key={c.id} className="flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+                    <span>
+                      {c.title} <span className="text-muted">({PLAIN_LABELS[c.category]})</span>
+                    </span>
+                    <span className={`shrink-0 rounded-full px-3 py-0.5 text-sm font-bold ${CHECK_TONE[c.status].className}`}>{CHECK_TONE[c.status].label}</span>
                   </li>
                 ))}
               </ul>
             </section>
-          )}
-        </>
-      )}
-    </main>
+
+            {report.diagnostics.length > 0 && (
+              <section className="flex flex-col gap-3">
+                <h2 className="font-display text-[28px] font-bold tracking-[-0.02em]">What else we noticed</h2>
+                <p className="-mt-2 text-[15px] text-muted">Recorded for context, not scored.</p>
+                <ul className="flex flex-col gap-1">
+                  {report.diagnostics.map((d) => (
+                    <li key={d.id}>
+                      <strong>{d.title}:</strong> <span className="break-all text-muted">{d.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+      </main>
+
+      <SiteFooter />
+    </div>
   );
 }
