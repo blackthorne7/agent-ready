@@ -70,7 +70,7 @@ export function AgentEvaluationProgress({ mode = "demo", stages = DEFAULT_STAGES
   }, [finished]);
 
   useEffect(() => {
-    setMessageIndex(0);
+    if (mode === "live") setMessageIndex(0);
   }, [activeStage?.id, mode]);
 
   return (
