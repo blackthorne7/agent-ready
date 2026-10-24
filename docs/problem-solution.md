@@ -42,14 +42,6 @@ Business owners can't see this happening, and they don't know how to fix it.
 
 AI agents are becoming the new front door to local businesses. Being readable by agents will matter the way being on Google mattered in 2005.
 
-## Landing page designs
-
-Three directions to choose from, side by side on one canvas: https://claude.ai/artifact/MyR1WrJvLrYYwqL5TDRjd9
-
-- **A · Main Street:** warm and local. An AI chat skips a restaurant whose menu it can't read.
-- **B · Report Card:** led by the score. A big score ring and three plain-English questions.
-- **C · The Conversation:** dark and story-led. "That 'sorry' is a lost customer."
-
 ## How it's built (for judges)
 
 - Live audit engine with 13 checks in three groups: access, understanding, action.

@@ -4,6 +4,16 @@ Lighthouse for AI agents. Audits any website for whether agents like Claude can 
 
 Live: https://snowy-thunder-epw3bj03.sfo.unikraft.app
 
+Problem and solution: [docs/problem-solution.md](docs/problem-solution.md)
+
+## Landing page designs
+
+Three directions to choose from, side by side on one canvas: https://claude.ai/artifact/MyR1WrJvLrYYwqL5TDRjd9
+
+- **A · Main Street:** warm and local. An AI chat skips a restaurant whose menu it can't read.
+- **B · Report Card:** led by the score. A big score ring and three plain-English questions.
+- **C · The Conversation:** dark and story-led. "That 'sorry' is a lost customer."
+
 ## Use it
 
 - **Web:** `/report?url=example.com` (server-rendered, works without JavaScript)
