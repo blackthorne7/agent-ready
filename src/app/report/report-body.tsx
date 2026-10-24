@@ -105,7 +105,7 @@ export function ReportBody({
   const report = finalReport ?? checklistReport;
 
   const areas = areaScores(report);
-  const fixes = rankFixes(report.checks);
+  const fixes = rankFixes(report.checks, [], 8, report.business.businessType);
   const top = fixes.slice(0, TOP_FIXES);
   const more = fixes.slice(TOP_FIXES);
   const quotes = agentQuotes(top, agent.kind === "done" ? agent.tasks : []);
