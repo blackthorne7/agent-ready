@@ -7,7 +7,7 @@ export function GET() {
 
 ## Use it
 
-- [Audit a site](/report?url=example.com): HTML report, works without JavaScript
+- [Audit a site](/report?url=example.com): HTML report for people; needs JavaScript (it waits for a live AI agent run)
 - [JSON API](/api/audit?url=example.com): GET or POST { "url": "..." }
 - [MCP server](/api/mcp): streamable HTTP, tools \`audit_site\` and \`generate_fixes\`
 `;

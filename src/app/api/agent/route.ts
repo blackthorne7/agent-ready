@@ -31,10 +31,14 @@ export async function POST(req: Request) {
 
   // The brand lookup (industry, location) runs alongside the agent, so it adds no wait.
   const brand = getBrand(new URL(url).hostname.replace(/^www\./, ""));
-  const tasks = await runAgentTasks(url);
+  // If the agent itself fails, still score and save once without it, so every site gets one final score.
+  const tasks = await runAgentTasks(url).catch((err) => {
+    console.error("[agent]", err);
+    return [];
+  });
   const report = await runAudit(url, { tasks: tasks.map(toTaskRun) });
   report.business = applyBrand(report.business, await brand);
-  // Saved as the site's latest audit, so the leaderboard ranks the score that includes the agent.
+  // The only place a report-page audit is saved, so each check gets one final score.
   await saveAudit(report);
   return Response.json({ url, tasks, report });
 }
