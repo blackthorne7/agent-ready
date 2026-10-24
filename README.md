@@ -66,6 +66,8 @@ pnpm agent https://example.com "book a demo"                 # AGENT_RUNTIME=omn
 
 With `AGENT_RUNTIME=omnara`, [Omnara](https://docs.omnara.com) runs the agent loop and model, and our tools (`lib/agent/tools.ts`) run as Omnara custom tools on our server. Each run logs a dashboard link. Without it, `lib/agent/model.ts` calls Claude directly (needs `ANTHROPIC_API_KEY`). Both share the guardrails in `lib/agent/guard.ts`. The agent reads real pages through `lib/page.ts`; `AGENT_FAKE_SITE=1` swaps in the fake site in `lib/page-fake.ts`.
 
+**Pricing:** the score and report are free; exporting a site's fix link costs $9, paid with Stripe Checkout (`src/lib/payments.ts`, `/api/checkout`). `/api/fix-link` checks the paid session with Stripe before creating a link, so the paywall holds for direct API calls. Test mode only: set `STRIPE_SECRET_KEY=sk_test_...` (live keys are refused) and pay with card `4242 4242 4242 4242`, any future date, any CVC. Without the key, fix links stay free. The MCP `generate_fixes` tool is not gated.
+
 Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (audits, fix links, leaderboard) and `lib/agent/schema.sql` (`agent_runs`, `agent_steps`, `audit_reports`). Every audit from the web, API or MCP is saved when `SUPABASE_SERVICE_ROLE_KEY` is set.
 
 ## Deploy (Unikraft Cloud)

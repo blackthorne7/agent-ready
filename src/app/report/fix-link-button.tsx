@@ -11,19 +11,61 @@ type Source = "banner" | "repeat";
 
 type State =
   | { kind: "idle" }
-  | { kind: "creating"; from: Source; action: "copy" | "email" }
+  | { kind: "creating"; from: Source; action: "copy" | "email" | "pay" }
   | { kind: "copied"; from: Source; href: string; clipboard: boolean; staying: boolean }
   | { kind: "error"; from: Source; message: string };
 
-async function createFixLink(url: string): Promise<string> {
+/** Whether exporting needs payment, and the paid Stripe Checkout Session if the visitor just came back from one. */
+export interface Payment {
+  required: boolean;
+  priceLabel: string;
+  /** ?checkout=<session id> from Stripe's return URL. */
+  checkout?: string;
+}
+
+class PaymentRequired extends Error {}
+
+async function createFixLink(url: string, checkout: string | undefined): Promise<string> {
   const res = await fetch("/api/fix-link", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, checkout }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 402) throw new PaymentRequired(body.error ?? "Payment required");
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return new URL(body.path, window.location.origin).toString();
+}
+
+async function startCheckout(url: string): Promise<void> {
+  const res = await fetch("/api/checkout", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ url }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
-  return new URL(body.path, window.location.origin).toString();
+  if (!res.ok || !body.checkoutUrl) throw new Error(body.error ?? `Request failed (${res.status})`);
+  window.location.assign(body.checkoutUrl);
+}
+
+// A paid session is remembered per site in this browser, so a reload or a later visit doesn't ask again.
+const paidKey = (url: string) => `agentready:fix-paid:${new URL(url).hostname.replace(/^www\./, "")}`;
+
+function readPaid(url: string): string | undefined {
+  try {
+    return localStorage.getItem(paidKey(url)) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writePaid(url: string, session: string | null) {
+  try {
+    if (session) localStorage.setItem(paidKey(url), session);
+    else localStorage.removeItem(paidKey(url));
+  } catch {
+    // Private mode or blocked storage: the visitor just pays per visit.
+  }
 }
 
 // Safari only allows clipboard writes inside the click, so hand it a ClipboardItem that resolves
@@ -51,10 +93,25 @@ export type FixLink = ReturnType<typeof useFixLink>;
  * Creates the shareable fix plan (/fix/<slug>) from the saved final audit of `url`, copies its link
  * and opens it. `url` is the final report's URL, the one /api/agent saved under.
  */
-export function useFixLink(url: string) {
+export function useFixLink(url: string, payment: Payment = { required: false, priceLabel: "" }) {
   const [state, setState] = useState<State>({ kind: "idle" });
+  const [paidSession, setPaidSession] = useState<string | undefined>(payment.checkout);
   const pending = useRef<{ url: string; href: Promise<string> } | null>(null);
   const busy = state.kind === "creating";
+  const locked = payment.required && !paidSession;
+
+  // Remember a session Stripe just returned, or pick up one paid earlier, and drop ?checkout= from the address bar.
+  useEffect(() => {
+    if (!payment.required) return;
+    if (payment.checkout) {
+      writePaid(url, payment.checkout);
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("checkout");
+      window.history.replaceState(null, "", clean);
+    } else {
+      setPaidSession(readPaid(url));
+    }
+  }, [url, payment.required, payment.checkout]);
 
   useEffect(() => {
     if (state.kind !== "copied" || state.staying) return;
@@ -71,8 +128,13 @@ export function useFixLink(url: string) {
 
   function link(): Promise<string> {
     if (pending.current?.url !== url) {
-      const href = createFixLink(url).catch((err) => {
+      const href = createFixLink(url, paidSession).catch((err) => {
         pending.current = null;
+        // A stored session that no longer verifies (other site, refunded): forget it and lock again.
+        if (err instanceof PaymentRequired) {
+          writePaid(url, null);
+          setPaidSession(undefined);
+        }
         throw err;
       });
       pending.current = { url, href };
@@ -82,7 +144,17 @@ export function useFixLink(url: string) {
 
   const fail = (from: Source, err: unknown) => setState({ kind: "error", from, message: err instanceof Error ? err.message : String(err) });
 
+  async function pay(from: Source) {
+    setState({ kind: "creating", from, action: "pay" });
+    try {
+      await startCheckout(url);
+    } catch (err) {
+      fail(from, err);
+    }
+  }
+
   async function copyAndOpen(from: Source) {
+    if (locked) return pay(from);
     setState({ kind: "creating", from, action: "copy" });
     const href = link();
     // A clipboard write can hang (no focus or user gesture), so stop waiting and show the link instead.
@@ -96,6 +168,7 @@ export function useFixLink(url: string) {
   }
 
   async function email(from: Source) {
+    if (locked) return pay(from);
     setState({ kind: "creating", from, action: "email" });
     try {
       const h = await link();
@@ -110,10 +183,12 @@ export function useFixLink(url: string) {
 
   const stay = () => setState((s) => (s.kind === "copied" ? { ...s, staying: true } : s));
 
-  return { state, busy, copyAndOpen, email, stay };
+  return { state, busy, locked, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
 }
 
-function copyLabel({ state }: FixLink): string {
+function copyLabel({ state, locked, priceLabel }: FixLink): string {
+  if (state.kind === "creating" && state.action === "pay") return "Opening checkout…";
+  if (locked) return `Get my fix link · ${priceLabel}`;
   if (state.kind === "creating" && state.action === "copy") return "Creating your link…";
   if (state.kind === "copied") return state.clipboard ? "Copied ✓" : "Link ready";
   return "Copy my fix link";
@@ -132,7 +207,7 @@ function Status({ fix, from }: { fix: FixLink; from: Source }) {
   if (state.kind === "error") {
     return (
       <p role="alert" className="rounded-2xl bg-white px-5 py-4 text-[#9f1239]">
-        Couldn&apos;t create your fix link: {state.message}
+        Couldn&apos;t {fix.locked ? "start checkout" : "create your fix link"}: {state.message}
       </p>
     );
   }
@@ -163,6 +238,18 @@ function Status({ fix, from }: { fix: FixLink; from: Source }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** Price and demo card while locked; a receipt line once paid. Nothing when there's no paywall. */
+function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
+  if (fix.paid) return <p className={className}>Paid ✓ Your fix link for this site is unlocked.</p>;
+  if (!fix.locked) return null;
+  return (
+    <p className={className}>
+      One-time {fix.priceLabel} for this website. The report stays free. Demo checkout (Stripe test mode): pay with card{" "}
+      <span className="font-mono">4242 4242 4242 4242</span>, any future date and any CVC. No real money is charged.
+    </p>
   );
 }
 
@@ -198,6 +285,7 @@ export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
           </button>
         </div>
       </div>
+      <PaymentNote fix={fix} className="text-[15px] text-[#eaf1ff]" />
       <Status fix={fix} from="banner" />
     </section>
   );
@@ -218,6 +306,7 @@ export function FixLinkRepeat({ fix, count }: { fix: FixLink; count: number }) {
         </button>
         <span className="text-muted">{count === 1 ? "Your fix" : `All ${count} fixes`}, ready to paste into your website builder.</span>
       </div>
+      <PaymentNote fix={fix} className="text-[15px] text-muted" />
       <Status fix={fix} from="repeat" />
     </div>
   );
