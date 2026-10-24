@@ -24,7 +24,8 @@ export default async function FixPage({ params }: Props) {
   if (!link) notFound();
 
   const host = new URL(link.audit.url).hostname;
-  const items = rankFixes(link.audit.checks, link.audit.tasks);
+  // Every fix, not just the report's top few: the fix link is sold as the complete list.
+  const items = rankFixes(link.audit.checks, link.audit.tasks, Infinity);
   const after = scoreIfFixed(
     link.audit.checks,
     items.map((i) => i.id),
@@ -129,7 +130,7 @@ export default async function FixPage({ params }: Props) {
 
         <p className="text-[15px] text-muted">
           Based on our check on {new Date(link.audit.auditedAt).toUTCString()}. Made your changes?{" "}
-          <Link href={`/report?url=${encodeURIComponent(link.audit.url)}`} className="text-accent-text">
+          <Link href={`/report?url=${encodeURIComponent(link.audit.url)}&fresh=1`} className="text-accent-text">
             Check {host} again
           </Link>
           .

@@ -17,9 +17,12 @@ export class TtlCache<T> {
     return this.inFlight.has(key) || this.fresh(key) !== undefined;
   }
 
-  /** The cached value, or `run()`'s; `cached` is false only for the caller that did the run. Failures aren't cached. */
-  async get(key: string, run: () => Promise<T>): Promise<{ value: T; cached: boolean }> {
-    const hit = this.fresh(key);
+  /**
+   * The cached value, or `run()`'s; `cached` is false only for the caller that did the run. Failures
+   * aren't cached. `refresh` skips a cached value (but still joins a run already in progress).
+   */
+  async get(key: string, run: () => Promise<T>, { refresh = false } = {}): Promise<{ value: T; cached: boolean }> {
+    const hit = refresh ? undefined : this.fresh(key);
     if (hit !== undefined) return { value: hit, cached: true };
     const pending = this.inFlight.get(key);
     if (pending) return { value: await pending, cached: true };
