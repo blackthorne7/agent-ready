@@ -68,6 +68,36 @@ With `AGENT_RUNTIME=omnara`, [Omnara](https://docs.omnara.com) runs the agent lo
 
 **Pricing:** the score and report are free; exporting a site's fix link costs $9, paid with Stripe Checkout (`src/lib/payments.ts`, `/api/checkout`). `/api/fix-link` checks the paid session with Stripe before creating a link, so the paywall holds for direct API calls. Test mode only: set `STRIPE_SECRET_KEY=sk_test_...` (live keys are refused) and pay with card `4242 4242 4242 4242`, any future date, any CVC. Without the key, fix links stay free. The MCP `generate_fixes` tool is not gated.
 
+### Stripe demo (test mode)
+
+1. In the [Stripe dashboard](https://dashboard.stripe.com) turn on **Test mode** (newer accounts call it **Sandbox**), open **Developers → API keys** and copy the **Secret key** (`sk_test_...`). Put it in `.env` as `STRIPE_SECRET_KEY=sk_test_...`, no quotes or spaces.
+2. `pnpm dev`, open `/report?url=python.org`, wait for the score, and click **Get my fix link · $9**.
+3. Fill in Stripe Checkout with this dummy info. Nothing is charged; real card numbers are declined in test mode.
+
+| Field | Enter |
+| --- | --- |
+| Email | `test@example.com` |
+| Card number | `4242 4242 4242 4242` |
+| Expiry | `12/34` (any future date) |
+| CVC | `123` (any 3 digits) |
+| Name on card | `Test User` |
+| Country / ZIP | `United States` / `10001` |
+| Phone (only if Stripe Link asks, or untick "Save my information") | `(201) 555-0123` |
+| Link verification code (if asked) | `000000` |
+
+4. Pay. You're sent back to the report with **Paid ✓**; **Copy my fix link** now exports. The payment shows under **Payments** in the dashboard (test mode).
+5. The payment is remembered in that browser. After clearing storage or on another device, click **Already paid? Restore with your email** and enter the checkout email: the server finds that email's paid checkout for this website in Stripe (`/api/checkout/restore`, 10 tries an hour per visitor). It proves knowledge of the email, not ownership of the inbox; emailing a one-time code would.
+
+Other test cards:
+
+| Card | Result |
+| --- | --- |
+| `4000 0000 0000 0002` | Declined; the fix link stays locked |
+| `4000 0025 0000 3155` | Asks for 3-D Secure; approve it to pay |
+| `4000 0000 0000 9995` | Declined for insufficient funds |
+
+Locally the fix link itself is stored in Supabase, so exporting after paying needs the Supabase vars in `.env` too.
+
 Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (audits, fix links, leaderboard) and `lib/agent/schema.sql` (`agent_runs`, `agent_steps`, `audit_reports`). Every audit from the web, API or MCP is saved when `SUPABASE_SERVICE_ROLE_KEY` is set.
 
 ## Deploy (Unikraft Cloud)
@@ -93,7 +123,18 @@ unikraft run --metro sfo --name agent-ready -m 1024M --set service=snowy-thunder
   -e OMNARA_MODEL="${OMNARA_MODEL:-anthropic/claude-sonnet-5.5}" \
   -e CONTEXT_DEV_API_KEY="$CONTEXT_DEV_API_KEY" \
   -e LOGOLINK_CLIENT_ID="$LOGOLINK_CLIENT_ID" \
+  -e STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
+  -e SITE_URL=https://snowy-thunder-epw3bj03.sfo.unikraft.app \
   --image agent-ready/agent-ready:latest
+```
+
+To add the paywall to the instance that's already running, without dropping its other env vars:
+
+```bash
+unikraft instances stop agent-ready
+unikraft instances edit agent-ready --add runtime.env=STRIPE_SECRET_KEY=sk_test_...
+unikraft instances edit agent-ready --add runtime.env=SITE_URL=https://snowy-thunder-epw3bj03.sfo.unikraft.app
+unikraft instances start agent-ready
 ```
 
 `.env` must have the Supabase, `OMNARA_*` and Context.dev (`CONTEXT_DEV_API_KEY`, `LOGOLINK_CLIENT_ID`) vars; see `.env.example`. Nothing errors if one is missing: without the Omnara vars the agent section fails, and without the Context.dev ones logos disappear and categories and fix plans fall back to keywords and TODOs. Instance env vars can't be added later with `-e` (that replaces the whole env); use `unikraft instances edit agent-ready --add runtime.env=KEY=value` instead. Edits to env or image only take effect while the instance is stopped: `unikraft instances stop agent-ready`, edit, then `unikraft instances start agent-ready`.

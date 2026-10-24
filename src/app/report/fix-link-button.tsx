@@ -48,6 +48,18 @@ async function startCheckout(url: string): Promise<void> {
   window.location.assign(body.checkoutUrl);
 }
 
+/** "Already paid?": the paid session for this site bought with `email`, looked up in Stripe. */
+async function restorePayment(url: string, email: string): Promise<string> {
+  const res = await fetch("/api/checkout/restore", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, email }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.checkout) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return body.checkout;
+}
+
 // A paid session is remembered per site in this browser, so a reload or a later visit doesn't ask again.
 const paidKey = (url: string) => `agentready:fix-paid:${new URL(url).hostname.replace(/^www\./, "")}`;
 
@@ -183,7 +195,15 @@ export function useFixLink(url: string, payment: Payment = { required: false, pr
 
   const stay = () => setState((s) => (s.kind === "copied" ? { ...s, staying: true } : s));
 
-  return { state, busy, locked, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
+  /** Unlocks this browser again for a buyer who cleared storage or switched device. Throws with a message to show. */
+  async function restore(email: string) {
+    const session = await restorePayment(url, email);
+    writePaid(url, session);
+    setPaidSession(session);
+    pending.current = null;
+  }
+
+  return { state, busy, locked, restore, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
 }
 
 function copyLabel({ state, locked, priceLabel }: FixLink): string {
@@ -253,6 +273,60 @@ function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
   );
 }
 
+/** "Already paid? Restore with your email", for a buyer whose browser forgot the payment. */
+function RestorePayment({ fix }: { fix: FixLink }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<{ kind: "idle" | "checking" } | { kind: "error"; message: string }>({ kind: "idle" });
+  if (!fix.locked) return null;
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="self-start text-[15px] font-semibold text-white underline underline-offset-4">
+        Already paid? Restore with your email
+      </button>
+    );
+  }
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setStatus({ kind: "checking" });
+    try {
+      await fix.restore(email);
+    } catch (err) {
+      setStatus({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-2">
+      <label htmlFor="restore-email" className="text-[15px] text-[#eaf1ff]">
+        The email you used at checkout
+      </label>
+      <div className="flex flex-wrap gap-2.5">
+        <input
+          id="restore-email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="min-h-[48px] min-w-0 flex-[1_1_240px] rounded-xl px-4 text-lg text-black"
+        />
+        <button
+          type="submit"
+          disabled={status.kind === "checking"}
+          className="min-h-[48px] rounded-xl border-2 border-white px-5 text-lg font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+        >
+          {status.kind === "checking" ? "Checking…" : "Restore"}
+        </button>
+      </div>
+      {status.kind === "error" && (
+        <p role="alert" className="rounded-xl bg-white px-4 py-2.5 text-[#9f1239]">
+          {status.message}
+        </p>
+      )}
+    </form>
+  );
+}
+
 /** The report's main call to action. */
 export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
   return (
@@ -286,6 +360,7 @@ export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
         </div>
       </div>
       <PaymentNote fix={fix} className="text-[15px] text-[#eaf1ff]" />
+      <RestorePayment fix={fix} />
       <Status fix={fix} from="banner" />
     </section>
   );

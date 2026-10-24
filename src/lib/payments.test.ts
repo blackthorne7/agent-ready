@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { createCheckout, isPaid, paywallEnabled, requestOrigin, siteDomain } from "./payments";
+import { createCheckout, findPaidSession, isPaid, paywallEnabled, siteDomain, siteOrigin } from "./payments";
 
 type Call = { url: string; method: string; form: URLSearchParams | null; auth: string | null };
 
@@ -30,6 +30,7 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = realFetch;
   delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.SITE_URL;
 });
 
 describe("paywall", () => {
@@ -95,10 +96,45 @@ describe("isPaid", () => {
   });
 });
 
-describe("requestOrigin", () => {
-  it("uses the proxy's forwarded host and protocol", () => {
-    const req = new Request("http://0.0.0.0:3000/api/checkout", { headers: { "x-forwarded-host": "agentready.app", "x-forwarded-proto": "https" } });
-    assert.equal(requestOrigin(req), "https://agentready.app");
-    assert.equal(requestOrigin(new Request("http://localhost:3000/x", { headers: { host: "localhost:3000" } })), "http://localhost:3000");
+describe("findPaidSession (Already paid? Restore)", () => {
+  const sessions = [
+    { id: "cs_test_unpaid", url: null, payment_status: "unpaid", metadata: { domain: "example.com" } },
+    { id: "cs_test_other", url: null, payment_status: "paid", metadata: { domain: "another.com" } },
+    { id: "cs_test_mine", url: null, payment_status: "paid", metadata: { domain: "example.com" } },
+  ];
+
+  it("asks Stripe for completed checkouts by that email and returns the paid one for this site", async () => {
+    fakeStripe(() => ({ body: { data: sessions } }));
+    assert.equal(await findPaidSession(" Owner@Example.com ", "https://www.example.com/"), "cs_test_mine");
+    const q = new URL(calls[0].url).searchParams;
+    assert.equal(q.get("customer_details[email]"), "owner@example.com");
+    assert.equal(q.get("status"), "complete");
+  });
+
+  it("finds nothing for a site this email didn't pay for", async () => {
+    fakeStripe(() => ({ body: { data: sessions } }));
+    assert.equal(await findPaidSession("owner@example.com", "https://third.com/"), null);
+    fakeStripe(() => ({ body: { data: [] } }));
+    assert.equal(await findPaidSession("someone@else.com", "https://example.com/"), null);
+  });
+});
+
+describe("siteOrigin", () => {
+  const spoofed = () =>
+    new Request("http://0.0.0.0:3000/api/checkout", { headers: { host: "evil.example", "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" } });
+
+  it("uses SITE_URL and ignores Host headers the client can set", () => {
+    process.env.SITE_URL = "https://agentready.app/some/path";
+    assert.equal(siteOrigin(spoofed()), "https://agentready.app");
+  });
+
+  it("falls back to the Host header only on localhost", () => {
+    assert.equal(siteOrigin(new Request("http://localhost:3000/x", { headers: { host: "localhost:3000" } })), "http://localhost:3000");
+    assert.equal(siteOrigin(new Request("http://127.0.0.1:3000/x", { headers: { host: "127.0.0.1:3000" } })), "http://127.0.0.1:3000");
+  });
+
+  it("refuses to build a return URL from a non-local Host without SITE_URL", () => {
+    assert.throws(() => siteOrigin(spoofed()), /SITE_URL/);
+    assert.throws(() => siteOrigin(new Request("http://x/", { headers: { host: "localhost.evil.example" } })), /SITE_URL/);
   });
 });

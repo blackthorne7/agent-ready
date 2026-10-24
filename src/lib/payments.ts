@@ -1,6 +1,7 @@
 // Stripe Checkout for the fix link: the report is free, exporting a site's fixes to an AI agent costs FIX_LINK_PRICE_CENTS.
 // Calls Stripe's REST API directly (no SDK). Test mode only: a live key is refused, so this demo can't take real money.
 // Env: STRIPE_SECRET_KEY (sk_test_...). Unset = no paywall, fix links stay free.
+//      SITE_URL (e.g. https://snowy-thunder-epw3bj03.sfo.unikraft.app): where Stripe sends the payer back. Required off localhost.
 
 import { FIX_LINK_PRICE_CENTS } from "./pricing";
 
@@ -104,9 +105,42 @@ export async function isPaid(sessionId: string | undefined, siteUrl: string): Pr
   }
 }
 
-/** This request's public origin (the site runs behind a TLS proxy). */
-export function requestOrigin(req: Request): string {
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? new URL(req.url).host;
-  const proto = req.headers.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
-  return `${proto}://${host}`;
+interface SessionList {
+  data: CheckoutSession[];
+}
+
+/**
+ * "Already paid?": the paid Checkout Session for this site bought with `email`, or null.
+ * Lets a buyer unlock again after clearing storage or on another device, without unlocking the site for everyone.
+ * Proves knowledge of the checkout email, not ownership of the inbox; an emailed one-time code would.
+ */
+export async function findPaidSession(email: string, siteUrl: string): Promise<string | null> {
+  const domain = siteDomain(siteUrl);
+  const params = new URLSearchParams({ "customer_details[email]": email.trim().toLowerCase(), status: "complete", limit: "100" });
+  const { data } = await stripe<SessionList>(`/checkout/sessions?${params}`, { method: "GET" });
+  const session = data.find((s) => s.payment_status === "paid" && s.metadata?.domain === domain);
+  if (!session) return null;
+  verified.set(session.id, domain);
+  return session.id;
+}
+
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
+
+/**
+ * Where Stripe returns the payer: SITE_URL, never the request's Host header, which a client can set.
+ * Otherwise a checkout could send the payer, and their paid session id, to another domain.
+ * Without SITE_URL only localhost is allowed, for `pnpm dev`.
+ */
+export function siteOrigin(req: Request): string {
+  const configured = process.env.SITE_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      throw new PaymentError("SITE_URL isn't a valid URL.", 503);
+    }
+  }
+  const host = req.headers.get("host") ?? new URL(req.url).host;
+  if (LOCAL_HOST.test(host)) return `http://${host}`;
+  throw new PaymentError("Checkout isn't set up on this server (SITE_URL isn't set).", 503);
 }

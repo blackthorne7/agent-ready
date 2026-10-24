@@ -18,13 +18,14 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return Response.json({ error: 'Body must be JSON: { "url": "https://example.com/" }' }, { status: 400 });
   }
-  // Checked here, not just in the page: the paywall has to hold for direct API calls too.
-  if (paywallEnabled() && !(await isPaid(parsed.data.checkout, parsed.data.url))) {
-    return Response.json({ error: `The fix link costs ${FIX_LINK_PRICE_LABEL}. Pay first to export it.`, paymentRequired: true }, { status: 402 });
-  }
+  // Before the paywall check, so made-up session ids can't trigger unlimited Stripe lookups.
   const ip = clientIp(req);
   if (ip && !perVisitor.take(ip)) {
     return Response.json({ error: "Too many fix links created in the last hour. Try again later." }, { status: 429 });
+  }
+  // Checked here, not just in the page: the paywall has to hold for direct API calls too.
+  if (paywallEnabled() && !(await isPaid(parsed.data.checkout, parsed.data.url))) {
+    return Response.json({ error: `The fix link costs ${FIX_LINK_PRICE_LABEL}. Pay first to export it.`, paymentRequired: true }, { status: 402 });
   }
   try {
     const slug = await createFixLink(parsed.data.url);
