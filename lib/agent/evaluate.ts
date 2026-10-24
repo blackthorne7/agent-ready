@@ -5,13 +5,14 @@
 // results into the audit checks, prints the scored report, saves it to
 // reports/<host>-<time>.json and (if configured) Supabase audit_reports.
 //
-// NOTE: ../page.ts is still a stub that serves a fake site, so task results
-// are not about the real URL until it fetches real pages.
+// Tasks are AGENT_TASKS (./tasks), the same ones the report page runs.
+// AGENT_FAKE_SITE=1 points the agent at lib/page-fake.ts instead of the real site.
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { CATEGORY_ORDER, runAudit, type TaskRun } from "../../src/lib/audit";
 import { saveReport } from "./persist";
 import { runAgent } from "./run";
+import { AGENT_TASKS } from "./tasks";
 
 try {
   process.loadEnvFile(); // optional .env in the project root
@@ -19,13 +20,7 @@ try {
   // no .env, fine
 }
 
-// Universal tasks from evals/AGENT_CHECKS.md ("Any site"). Prefix ids with
-// "search" or "multistep" to feed those checks.
-const TASKS = [
-  { taskId: "find-contact", goal: "Find how to contact this business (phone, email or a contact form)" },
-  { taskId: "find-privacy", goal: "Find the privacy policy" },
-  { taskId: "find-pricing", goal: "Find pricing information" },
-];
+// Task ids starting with "search" or "multistep" also feed those checks.
 const MAX_STEPS = 10;
 
 async function main() {
@@ -38,11 +33,11 @@ async function main() {
 
   const tasks: TaskRun[] = [];
   const runIds: string[] = [];
-  for (const t of TASKS) {
+  for (const t of AGENT_TASKS) {
     for (let i = 0; i < runs; i++) {
-      const { runId, steps, result } = await runAgent({ url, task: t.goal, maxSteps: MAX_STEPS });
+      const { runId, steps, result } = await runAgent({ url, task: t.task, maxSteps: MAX_STEPS });
       runIds.push(runId);
-      tasks.push({ ...t, status: result.status, steps: steps.length, maxSteps: MAX_STEPS, reason: result.reason });
+      tasks.push({ taskId: t.id, goal: t.task, status: result.status, steps: steps.length, maxSteps: MAX_STEPS, reason: result.reason });
     }
   }
 

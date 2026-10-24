@@ -1,17 +1,10 @@
-// STUB — owned by a teammate. Replace with the real implementation.
-//
-// Serves a small fake website so the agent can run end to end without the
-// network. Paths on any host:
-//   /            homepage with nav + footer links
-//   /pricing     static pricing content
-//   /demo        "book a demo" form (one field has no label)
-//   /signup      client-rendered shell (jsEmptyLikely)
-//   /contact     simple, fully labelled contact form
-// Any host containing "blocked" returns a 403 bot wall.
-//
-// NOTE: types.ts has no Link/Form types yet, so they are defined here.
-// If the teammate adds them to types.ts, import them from there instead.
+// Page utilities used by the agent's tools (lib/agent/tools.ts).
+// Real fetching goes through safeFetch (src/lib/audit/fetch.ts), which blocks private
+// networks and caps redirects and response size. AGENT_FAKE_SITE=1 serves lib/page-fake.ts instead.
 
+import * as cheerio from "cheerio";
+import { safeFetch } from "../src/lib/audit/fetch";
+import * as fake from "./page-fake";
 import type { FetchResult } from "./types";
 
 export interface Link {
@@ -22,7 +15,9 @@ export interface Link {
 export interface FormField {
   name: string | null;
   type: string;
+  /** From <label>, aria-label or aria-labelledby. Placeholder alone doesn't count. */
   label: string | null;
+  placeholder: string | null;
   required: boolean;
 }
 
@@ -31,6 +26,8 @@ export interface FormInfo {
   method: string;
   fields: FormField[];
   submitText: string | null;
+  /** The form embeds a captcha widget, so submitting likely needs a human. */
+  captcha?: boolean;
 }
 
 export interface FetchOptions {
@@ -38,149 +35,139 @@ export interface FetchOptions {
   signal?: AbortSignal;
 }
 
-const NAV = `
-<nav>
-  <a href="/">Home</a>
-  <a href="/pricing">Pricing</a>
-  <a href="/demo">Book a demo</a>
-  <a href="/signup">Sign up</a>
-</nav>`;
+const fakeSite = () => process.env.AGENT_FAKE_SITE === "1";
 
-const FOOTER = `
-<footer>
-  <a href="/contact">Contact</a>
-  <a href="/about">About</a>
-  <a href="https://twitter.com/acme">Twitter</a>
-</footer>`;
+const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 
-const PAGES: Record<string, { title: string; body: string }> = {
-  "/": {
-    title: "Acme Analytics — Product analytics for teams",
-    body: `<main><h1>Understand your users</h1>
-      <p>Acme Analytics helps product teams see what users do. Trusted by 2,000 companies.</p>
-      <a href="/demo">Talk to sales</a></main>`,
-  },
-  "/pricing": {
-    title: "Pricing — Acme Analytics",
-    body: `<main><h1>Pricing</h1>
-      <p>Starter: $29/month for up to 10k events.</p>
-      <p>Growth: $199/month for up to 1M events.</p>
-      <p>Enterprise: contact sales.</p></main>`,
-  },
-  "/demo": {
-    title: "Book a demo — Acme Analytics",
-    body: `<main><h1>Book a demo</h1>
-      <form action="/api/demo" method="post">
-        <label for="name">Full name</label><input id="name" name="name" type="text" required>
-        <label for="email">Work email</label><input id="email" name="email" type="email" required>
-        <input name="company_size" type="text" placeholder="" required>
-        <button type="submit">Request demo</button>
-      </form></main>`,
-  },
-  "/signup": {
-    title: "Sign up",
-    body: `<div id="root"></div><script src="/static/app.js"></script>`,
-  },
-  "/contact": {
-    title: "Contact — Acme Analytics",
-    body: `<main><h1>Contact us</h1>
-      <form action="/api/contact" method="post">
-        <label for="c-email">Email</label><input id="c-email" name="email" type="email" required>
-        <label for="c-msg">Message</label><textarea id="c-msg" name="message" required></textarea>
-        <button type="submit">Send</button>
-      </form></main>`,
-  },
-  "/about": {
-    title: "About — Acme Analytics",
-    body: `<main><h1>About</h1><p>We are a team of 40 based in Berlin.</p></main>`,
-  },
-};
+const CAPTCHA_WIDGET = /g-recaptcha|recaptcha\/api|hcaptcha\.com|h-captcha|cf-turnstile|challenges\.cloudflare\.com\/turnstile/i;
 
-function htmlToText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+// Bot walls and challenge pages. Only trusted on short pages so articles that mention "captcha" don't trip it.
+// `widget` markers are captcha widgets that sites also embed inside normal forms: those only count as a
+// wall when the page has no form (a form with a captcha is reported per form instead, see extractForms).
+const CHALLENGE_MARKERS: { re: RegExp; label: string; widget?: boolean }[] = [
+  { re: /cf-challenge|Attention Required! \| Cloudflare|Just a moment\.\.\./i, label: "Cloudflare challenge page" },
+  { re: /captcha-delivery\.com|datadome/i, label: "DataDome bot protection" },
+  { re: /px-captcha|perimeterx/i, label: "PerimeterX/HUMAN bot protection" },
+  { re: /Access Denied.*Reference #|akamai/i, label: "Akamai access denial" },
+  { re: CAPTCHA_WIDGET, label: "captcha challenge", widget: true },
+];
+
+function detectBlock(status: number, html: string, textLength: number): string | undefined {
+  if (status === 401) return "HTTP 401: login required";
+  if (status === 403) return "HTTP 403: access forbidden to automated clients";
+  if (status === 429) return "HTTP 429: rate limited";
+  if (textLength < 1500) {
+    const hasForm = /<form[\s>]/i.test(html);
+    for (const m of CHALLENGE_MARKERS) {
+      if (m.widget && hasForm) continue;
+      if (m.re.test(html)) return `${m.label} (HTTP ${status})`;
+    }
+  }
+  if (status === 503 && textLength < 1500) return "HTTP 503 with a near-empty page (possible bot challenge)";
+  return undefined;
 }
 
-export async function fetchPage(url: string, _opts: FetchOptions = {}): Promise<FetchResult> {
-  await new Promise((r) => setTimeout(r, 150));
-  const u = new URL(url);
+export async function fetchPage(url: string, opts: FetchOptions = {}): Promise<FetchResult> {
+  if (fakeSite()) return fake.fetchPage(url, opts);
 
-  if (u.hostname.includes("blocked")) {
-    const html = `<html><head><title>Access denied</title></head><body>Checking your browser… Please complete the captcha.</body></html>`;
-    return {
-      status: 403,
-      html,
-      text: htmlToText(html),
-      title: "Access denied",
-      jsEmptyLikely: false,
-      blocked: true,
-      blockReason: "403 with bot-protection challenge page (captcha)",
-    };
+  const res = await safeFetch(url);
+  if (res.error) throw new Error(`Could not fetch ${url}: ${res.error}`);
+
+  const isHtml = /html|xml/i.test(res.contentType) || /^\s*</.test(res.body);
+  if (!isHtml) {
+    const text = clean(res.body);
+    return { status: res.status, html: "", text, title: "", jsEmptyLikely: false, blocked: false };
   }
 
-  const path = u.pathname.replace(/\/+$/, "") || "/";
-  const page = PAGES[path];
-  if (!page) {
-    const html = `<html><head><title>Not found</title></head><body>${NAV}<p>Page not found</p>${FOOTER}</body></html>`;
-    return { status: 404, html, text: htmlToText(html), title: "Not found", jsEmptyLikely: false, blocked: false };
-  }
+  const $ = cheerio.load(res.body);
+  const title = clean($("title").first().text());
+  const scriptCount = $("script[src], script:not([type]), script[type='module']").length;
+  const emptyAppRoot = $("#root, #app, #__next, #__nuxt, #svelte, [data-reactroot]").filter((_, el) => !clean($(el).text())).length > 0;
+  $("script, style, noscript, svg, template, iframe").remove();
+  const main = $("main").first();
+  const text = clean((main.length ? main : $("body")).text());
 
-  const html = `<html><head><title>${page.title}</title></head><body>${NAV}${page.body}${FOOTER}</body></html>`;
-  const mainText = htmlToText(page.body);
+  const blockReason = detectBlock(res.status, res.body, text.length);
   return {
-    status: 200,
-    html,
-    text: htmlToText(html),
-    title: page.title,
-    jsEmptyLikely: mainText.length < 20,
-    blocked: false,
+    status: res.status,
+    html: res.body,
+    text,
+    title,
+    // Very little readable text plus an empty app root or several scripts: probably rendered client-side.
+    jsEmptyLikely: !blockReason && text.length < 200 && (emptyAppRoot || scriptCount >= 3),
+    blocked: !!blockReason,
+    blockReason,
   };
 }
 
 export function extractLinks(html: string, baseUrl: string): Link[] {
+  if (fakeSite()) return fake.extractLinks(html, baseUrl);
+  const $ = cheerio.load(html);
   const links: Link[] = [];
-  for (const m of html.matchAll(/<a\s[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)) {
+  $("a[href]").each((_, el) => {
+    const a = $(el);
+    const href = a.attr("href") ?? "";
+    if (!href || href.startsWith("#") || /^(javascript|mailto|tel):/i.test(href)) return;
+    const text = clean(a.text()) || a.attr("aria-label") || a.attr("title") || a.find("img[alt]").attr("alt") || "";
     try {
-      links.push({ text: htmlToText(m[2]), href: new URL(m[1], baseUrl).toString() });
+      const abs = new URL(href, baseUrl);
+      abs.hash = "";
+      links.push({ text: clean(text), href: abs.toString() });
     } catch {
-      // skip malformed hrefs
+      // malformed href
     }
-  }
+  });
   return links;
 }
 
 export function extractForms(html: string): FormInfo[] {
+  if (fakeSite()) return fake.extractForms(html);
+  const $ = cheerio.load(html);
   const forms: FormInfo[] = [];
-  for (const fm of html.matchAll(/<form([^>]*)>([\s\S]*?)<\/form>/gi)) {
-    const attrs = fm[1];
-    const inner = fm[2];
-    const labels = new Map<string, string>();
-    for (const lm of inner.matchAll(/<label[^>]*for="([^"]+)"[^>]*>([\s\S]*?)<\/label>/gi)) {
-      labels.set(lm[1], htmlToText(lm[2]));
-    }
+
+  $("form").each((_, formEl) => {
+    const form = $(formEl);
     const fields: FormField[] = [];
-    for (const im of inner.matchAll(/<(input|textarea|select)([^>]*)>/gi)) {
-      const a = im[2];
-      const id = /\bid="([^"]+)"/.exec(a)?.[1];
-      const type = im[1].toLowerCase() === "input" ? /\btype="([^"]+)"/.exec(a)?.[1] ?? "text" : im[1].toLowerCase();
-      if (type === "hidden" || type === "submit") continue;
+    form.find("input, select, textarea").each((_, fieldEl) => {
+      const f = $(fieldEl);
+      const tag = fieldEl.tagName.toLowerCase();
+      const type = tag === "input" ? (f.attr("type") ?? "text").toLowerCase() : tag;
+      if (["hidden", "submit", "button", "image", "reset"].includes(type)) return;
+
+      const id = f.attr("id");
+      const labelledBy = f.attr("aria-labelledby");
+      const label =
+        (id && clean($(`label[for="${id}"]`).first().text())) ||
+        clean(f.closest("label").text()) ||
+        f.attr("aria-label") ||
+        (labelledBy &&
+          clean(
+            labelledBy
+              .split(/\s+/)
+              .map((ref) => $(`#${ref}`).text())
+              .join(" "),
+          )) ||
+        null;
+
       fields.push({
-        name: /\bname="([^"]+)"/.exec(a)?.[1] ?? null,
+        name: f.attr("name") ?? null,
         type,
-        label: (id && labels.get(id)) || null,
-        required: /\brequired\b/.test(a),
+        label: label ? clean(label) : null,
+        placeholder: f.attr("placeholder") ?? null,
+        required: f.is("[required]") || f.attr("aria-required") === "true",
       });
-    }
-    forms.push({
-      action: /\baction="([^"]*)"/.exec(attrs)?.[1] ?? null,
-      method: (/\bmethod="([^"]*)"/.exec(attrs)?.[1] ?? "get").toLowerCase(),
-      fields,
-      submitText: htmlToText(/<button[^>]*>([\s\S]*?)<\/button>/i.exec(inner)?.[1] ?? "") || null,
     });
-  }
+
+    const submit = form.find("button[type=submit], button:not([type]), input[type=submit]").first();
+    const submitText = clean(submit.is("input") ? (submit.attr("value") ?? "") : submit.text()) || submit.attr("aria-label") || null;
+
+    forms.push({
+      action: form.attr("action") ?? null,
+      method: (form.attr("method") ?? "get").toLowerCase(),
+      fields,
+      submitText,
+      captcha: CAPTCHA_WIDGET.test($.html(form)),
+    });
+  });
   return forms;
 }

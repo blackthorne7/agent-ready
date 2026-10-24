@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CATEGORY_ORDER, runAudit, type Category, type CheckResult } from "@/lib/audit";
 import { AuditForm } from "../audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow, TONE, toneFor, type Tone } from "../ui";
+import { AgentSection } from "./agent-section";
 
 export const dynamic = "force-dynamic";
 
@@ -168,6 +169,8 @@ export default async function ReportPage({ searchParams }: Props) {
                 </ul>
               </section>
             )}
+
+            <AgentSection url={report.url} />
           </>
         )}
       </main>
