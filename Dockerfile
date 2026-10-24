@@ -1,5 +1,7 @@
-# Build natively on the host arch (fast), run on Unikraft's x86_64.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+# Build natively on the host arch (fast), run on Unikraft's x86_64. The build stage is glibc (slim):
+# Next.js compiles ~4x faster there than on Alpine/musl, and its output is plain JS that runs on the
+# Alpine node below (sharp is the only native module, and images are unoptimized, so it never loads).
+FROM --platform=$BUILDPLATFORM node:22-slim AS build
 WORKDIR /usr/src
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

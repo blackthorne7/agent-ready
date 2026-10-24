@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { checkPayment, createCheckout, findPaidSession, paywallEnabled, siteDomain, siteOrigin } from "./payments";
+import { DEFAULT_SITE_URL, checkPayment, createCheckout, findPaidSession, paywallEnabled, siteDomain, siteOrigin } from "./payments";
 
 type Call = { url: string; method: string; form: URLSearchParams | null; auth: string | null };
 
@@ -162,8 +162,8 @@ describe("siteOrigin", () => {
     assert.equal(siteOrigin(new Request("http://127.0.0.1:3000/x", { headers: { host: "127.0.0.1:3000" } })), "http://127.0.0.1:3000");
   });
 
-  it("refuses to build a return URL from a non-local Host without SITE_URL", () => {
-    assert.throws(() => siteOrigin(spoofed()), /SITE_URL/);
-    assert.throws(() => siteOrigin(new Request("http://x/", { headers: { host: "localhost.evil.example" } })), /SITE_URL/);
+  it("never uses a non-local Host: without SITE_URL it returns to the live site", () => {
+    assert.equal(siteOrigin(spoofed()), DEFAULT_SITE_URL);
+    assert.equal(siteOrigin(new Request("http://x/", { headers: { host: "localhost.evil.example" } })), DEFAULT_SITE_URL);
   });
 });

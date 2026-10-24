@@ -104,7 +104,9 @@ Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (a
 
 ## Deploy (Unikraft Cloud)
 
-Requires Docker and `unikraft login`.
+**Merging to `main` deploys automatically** (`.github/workflows/deploy.yml`): it runs the unit tests, builds the image, swaps it onto the live `agent-ready` instance and checks the site. Only the image changes; the instance's env vars are kept. It needs the `UNIKRAFT_TOKEN` repository secret, and can be re-run from the Actions tab ("Run workflow"). Pull requests get tests and a production build first (`ci.yml`).
+
+To add or change an env var, stop the instance, edit, start (see below). The manual steps are for first-time setup or when Actions is down. Requires Docker and `unikraft login`.
 
 Deploys attach to the existing `snowy-thunder-epw3bj03` service so the URL never changes. Supabase env is read from `.env` (it isn't baked into the image).
 

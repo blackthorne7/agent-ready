@@ -10,7 +10,8 @@ import { runAgentTasks, toTaskRun, type AgentTaskRun } from "../../../../lib/age
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const Body = z.object({ url: z.string().trim().min(1) });
+// fresh: the visitor asked to check again (e.g. after making fixes), so skip the cached result.
+const Body = z.object({ url: z.string().trim().min(1), fresh: z.boolean().optional() });
 
 const HOUR = 60 * 60 * 1000;
 // Each new run costs three Omnara agent runs and a Context.dev lookup. Repeat visits within the
@@ -37,7 +38,8 @@ export async function POST(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
 
-  if (!results.has(url)) {
+  const fresh = parsed.data.fresh === true;
+  if (fresh || !results.has(url)) {
     const ip = clientIp(req);
     if ((ip && !perVisitor.take(ip)) || !overall.take("all")) {
       return Response.json(
@@ -60,6 +62,6 @@ export async function POST(req: Request) {
     // The only place a report-page audit is saved: once per run, so each check gets one final score.
     await saveAudit(report);
     return { url, tasks, report };
-  });
+  }, { refresh: fresh });
   return Response.json({ ...value, cached });
 }

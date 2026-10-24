@@ -1,7 +1,7 @@
 // Stripe Checkout for the fix link: the report is free, exporting a site's fixes to an AI agent costs FIX_LINK_PRICE_CENTS.
 // Calls Stripe's REST API directly (no SDK). Test mode only: a live key is refused, so this demo can't take real money.
 // Env: STRIPE_SECRET_KEY (sk_test_...). Unset = no paywall, fix links stay free.
-//      SITE_URL (e.g. https://snowy-thunder-epw3bj03.sfo.unikraft.app): where Stripe sends the payer back. Required off localhost.
+//      SITE_URL: where Stripe sends the payer back. Defaults to the live site (DEFAULT_SITE_URL); localhost uses itself.
 
 import { FIX_LINK_PRICE_CENTS } from "./pricing";
 
@@ -151,12 +151,15 @@ export async function findPaidSession(email: string, siteUrl: string, report: st
   return session.id;
 }
 
+/** The live site's permanent address (README "Deploy": the URL never changes). */
+export const DEFAULT_SITE_URL = "https://snowy-thunder-epw3bj03.sfo.unikraft.app";
+
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 /**
  * Where Stripe returns the payer: SITE_URL, never the request's Host header, which a client can set.
  * Otherwise a checkout could send the payer, and their paid session id, to another domain.
- * Without SITE_URL only localhost is allowed, for `pnpm dev`.
+ * Without SITE_URL: localhost for `pnpm dev`, else the live site, so a deploy that lacks it still works.
  */
 export function siteOrigin(req: Request): string {
   const configured = process.env.SITE_URL?.trim();
@@ -169,5 +172,5 @@ export function siteOrigin(req: Request): string {
   }
   const host = req.headers.get("host") ?? new URL(req.url).host;
   if (LOCAL_HOST.test(host)) return `http://${host}`;
-  throw new PaymentError("Checkout isn't set up on this server (SITE_URL isn't set).", 503);
+  return DEFAULT_SITE_URL;
 }

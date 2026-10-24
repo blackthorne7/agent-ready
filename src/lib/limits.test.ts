@@ -41,6 +41,15 @@ describe("TtlCache", () => {
     assert.equal(runs, 1);
   });
 
+  it("re-runs on refresh and caches the new value", async () => {
+    const cache = new TtlCache<number>(1000, 10);
+    let runs = 0;
+    const run = async () => ++runs;
+    await cache.get("a", run);
+    assert.deepEqual(await cache.get("a", run, { refresh: true }), { value: 2, cached: false });
+    assert.deepEqual(await cache.get("a", run), { value: 2, cached: true });
+  });
+
   it("doesn't cache failures", async () => {
     const cache = new TtlCache<number>(1000, 10);
     await assert.rejects(cache.get("a", async () => Promise.reject(new Error("boom"))));

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Report } from "@/lib/audit/types";
 import type { AgentTaskRun } from "../../../lib/agent/tasks";
 import { TONE, type Tone } from "../ui";
@@ -16,18 +16,29 @@ export type AgentState = { kind: "loading" } | { kind: "error"; message: string 
 
 /**
  * Sends an AI agent to try a few real tasks on the site, after the static report has rendered.
- * `onReport` receives the site re-scored with the agent's results.
+ * `onReport` receives the site re-scored with the agent's results. With `?fresh=1` in the address
+ * (the fix page's "Check again"), the server skips its one-hour cached result and runs the agent again.
  */
 export function useAgentRun(url: string, onReport: (report: Report) => void): AgentState {
   const [state, setState] = useState<AgentState>({ kind: "loading" });
+  const fresh = useRef<boolean | null>(null);
 
   useEffect(() => {
+    // Read once, then drop it from the address bar so a reload doesn't force another full run.
+    if (fresh.current === null) {
+      const params = new URLSearchParams(window.location.search);
+      fresh.current = params.get("fresh") === "1";
+      if (fresh.current) {
+        params.delete("fresh");
+        window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+      }
+    }
     let cancelled = false;
     setState({ kind: "loading" });
     fetch("/api/agent", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, fresh: fresh.current }),
     })
       .then(async (res) => {
         const body = await res.json().catch(() => ({}));
