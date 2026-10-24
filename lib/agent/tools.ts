@@ -196,7 +196,7 @@ async function listFormsTool(input: unknown, ctx: ToolContext): Promise<ToolOutp
   return {
     content: truncate(JSON.stringify({ url, forms, jsEmptyLikely: page.jsEmptyLikely })),
     summary: forms.length
-      ? `${forms.length} form(s): ${forms.map((f) => `#${f.index} ${f.fields.length} fields, submit "${f.submitText ?? "?"}"`).join("; ")}${unlabeled ? ` (${unlabeled} unlabeled fields)` : ""}`
+      ? `${forms.length} form(s): ${forms.map((f) => `#${f.index} ${f.fields.length} fields, submit "${f.submitText ?? "?"}"${f.captcha ? ", captcha" : ""}`).join("; ")}${unlabeled ? ` (${unlabeled} unlabeled fields)` : ""}`
       : `no forms${page.jsEmptyLikely ? " (page looks JS-rendered)" : ""}`,
     outcome: "ok",
   };
@@ -242,13 +242,18 @@ async function fillFormTool(input: unknown, ctx: ToolContext): Promise<ToolOutpu
       if (f.required) unidentifiable.push(`required ${f.type} field with no label and no name`);
       continue;
     }
-    if (!f.label) warnings.push(`field "${f.name}" has no label; meaning inferred from its name only`);
+    if (!f.label)
+      warnings.push(
+        `field "${f.name}" has no label; meaning inferred from its name${f.placeholder ? ` and placeholder "${f.placeholder}"` : ""} only`,
+      );
     const k = findValue(f);
     if (k) filled.push(id);
     else if (f.required) missing.push(id);
   }
   const unmatched = Object.keys(values).filter((k) => !used.has(k));
   if (unmatched.length) warnings.push(`values not matching any field: ${unmatched.join(", ")}`);
+
+  if (form.captcha) warnings.push("the form has a captcha, so submitting it likely needs a human");
 
   const canComplete = missing.length === 0 && unidentifiable.length === 0;
   const result = {
