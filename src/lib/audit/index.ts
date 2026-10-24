@@ -129,7 +129,8 @@ export async function runAudit(input: string, { tasks = [] }: AuditOptions = {})
     taskSuccessRate: scoredTasks.length ? scoredTasks.filter((t) => t.status === "success").length / scoredTasks.length : null,
     categories,
     checks: results,
-    business: detectBusiness(ctx),
+    // A challenge page says nothing about the business either; /api/agent fills this in from Context.dev.
+    business: blocked ? {} : detectBusiness(ctx),
     tasks,
     diagnostics: collectDiagnostics(ctx),
     ...(access && { access }),

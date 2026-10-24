@@ -21,7 +21,8 @@ The rubric has an area ("Can AI finish tasks for customers?") that only the AI a
 | --- | --- |
 | `src/app/report/page.tsx` | Runs the checklist for errors/blocked sites and as a fallback. Doesn't save. |
 | `src/app/report/report-body.tsx` | Holds everything behind the progress card until the final report arrives. `AGENT_STAGES` sets the card's stages. |
-| `src/app/api/agent/route.ts` | Runs the agent, re-scores, saves. If the agent throws, it still scores and saves once, without task results. |
+| `src/app/api/agent/route.ts` | Runs the agent, re-scores, saves. If the agent throws, it still scores and saves once, without task results. With `blocked: true` it records a bot-walled site instead (see below). |
+| `src/app/report/blocked-report.tsx` | The report for a site that blocked our checker: no score, how to unblock, and how owners let our checker in. |
 | `src/app/report/AgentEvaluationProgress.tsx` | The loading card (`mode="demo"` in `loading.tsx`, `mode="live"` in `report-body.tsx`). |
 
 ## Rules for changes
@@ -30,6 +31,10 @@ The rubric has an area ("Can AI finish tasks for customers?") that only the AI a
 - **Don't call `saveAudit` from the report page.** `/api/agent` is the only place the report flow saves.
 - **If the agent didn't run, say so.** The verdict card then says "AI task test didn't run…". Don't swap in a second number later.
 - **Fix link:** `/api/fix-link` builds the plan from the latest *saved* audit, so it only works after `/api/agent` has saved. The button only appears with the final report, so this holds.
+
+## Blocked sites
+
+A site that turns our checker away (bot wall, 403) gets **no score**: we only score what agents can see, and we never get around the block. The report page shows `BlockedReport`, which asks `/api/agent` with `blocked: true` to record it. The server re-checks the block itself, skips the agent, and saves a row with `status = 'blocked'` and no score (at most once an hour per site). The leaderboard lists these unranked under "Blocking AI assistants", and fix links refuse them.
 
 ## Still open
 

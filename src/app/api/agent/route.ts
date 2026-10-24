@@ -11,12 +11,15 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // fresh: the visitor asked to check again (e.g. after making fixes), so skip the cached result.
-const Body = z.object({ url: z.string().trim().min(1), fresh: z.boolean().optional() });
+// blocked: the report page hit a bot wall, so record that for the leaderboard instead of running the agent.
+const Body = z.object({ url: z.string().trim().min(1), fresh: z.boolean().optional(), blocked: z.boolean().optional() });
 
 const HOUR = 60 * 60 * 1000;
 // Each new run costs three Omnara agent runs and a Context.dev lookup. Repeat visits within the
 // hour reuse the result for free; only new runs count against the limits.
 const results = new TtlCache<{ url: string; tasks: AgentTaskRun[]; report: Report }>(HOUR, 500);
+// Kept apart from `results`, so a site that unblocks us isn't served its old blocked result.
+const blockedResults = new TtlCache<Report>(HOUR, 500);
 const perVisitor = new RateLimiter(6, HOUR);
 const overall = new RateLimiter(120, HOUR);
 
@@ -39,7 +42,8 @@ export async function POST(req: Request) {
   }
 
   const fresh = parsed.data.fresh === true;
-  if (fresh || !results.has(url)) {
+  const cache = parsed.data.blocked ? blockedResults : results;
+  if (fresh || !cache.has(url)) {
     const ip = clientIp(req);
     if ((ip && !perVisitor.take(ip)) || !overall.take("all")) {
       return Response.json(
@@ -47,6 +51,11 @@ export async function POST(req: Request) {
         { status: 429 },
       );
     }
+  }
+
+  if (parsed.data.blocked) {
+    const { value, cached } = await blockedResults.get(url, () => saveBlocked(url), { refresh: fresh });
+    return Response.json({ report: value, cached });
   }
 
   const { value, cached } = await results.get(url, async () => {
@@ -64,4 +73,17 @@ export async function POST(req: Request) {
     return { url, tasks, report };
   }, { refresh: fresh });
   return Response.json({ ...value, cached });
+}
+
+/**
+ * A bot-walled site gets no score, but is saved so the leaderboard can list it as blocked. The
+ * server re-checks rather than trusting the page, and skips the agent: the wall turns it away too.
+ */
+async function saveBlocked(url: string): Promise<Report> {
+  const brand = getBrand(new URL(url).hostname.replace(/^www\./, ""));
+  const report = await runAudit(url);
+  if (report.evaluationStatus !== "blocked_by_site") return report;
+  report.business = applyBrand(report.business, await brand);
+  await saveAudit(report);
+  return report;
 }

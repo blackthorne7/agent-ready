@@ -60,11 +60,12 @@ create table if not exists audits (
   id               uuid primary key default gen_random_uuid(),
   business_id      uuid not null references businesses(id) on delete cascade,
   url              text not null,                  -- exact URL audited
-  score            integer not null check (score between 0 and 100),
-  grade            text not null check (grade in ('A', 'B', 'C', 'D', 'F')),
-  access_score     integer not null,               -- "Can agents get in?"
-  understand_score integer not null,               -- "Can agents understand it?"
-  act_score        integer not null,               -- "Can agents take action?"
+  status           text not null default 'evaluated' check (status in ('evaluated', 'blocked')),
+  score            integer check (score between 0 and 100),  -- null only when blocked
+  grade            text check (grade in ('A', 'B', 'C', 'D', 'F')),
+  access_score     integer,                        -- "Can agents get in?"
+  understand_score integer,                        -- "Can agents understand it?"
+  act_score        integer,                        -- "Can agents take action?"
   checks           jsonb not null default '[]',    -- CheckResult[] from the audit
   tasks            jsonb not null default '[]',    -- TaskRun[]: the AI agent's task results
   error            text,                           -- set when the site couldn't be loaded
@@ -72,6 +73,18 @@ create table if not exists audits (
 );
 
 create index if not exists audits_business_idx on audits (business_id, audited_at desc);
+
+-- Added after launch: blocked sites (a bot wall turned our checker away) are saved with no score,
+-- so the leaderboard can list them as blocked. Safe to re-run.
+alter table audits add column if not exists status text not null default 'evaluated';
+alter table audits alter column score            drop not null;
+alter table audits alter column grade            drop not null;
+alter table audits alter column access_score     drop not null;
+alter table audits alter column understand_score drop not null;
+alter table audits alter column act_score        drop not null;
+alter table audits drop constraint if exists audits_status_check;
+alter table audits add constraint audits_status_check
+  check (status in ('evaluated', 'blocked') and (status = 'blocked') = (score is null));
 
 
 -- 4. Fix links --------------------------------------------------------------
@@ -90,13 +103,16 @@ create table if not exists fix_links (
 
 
 -- 5. Leaderboard ------------------------------------------------------------
--- Latest successful audit per listed business, with four rankings:
+-- Latest successful audit per listed business, with four rankings (null for blocked sites,
+-- which have no score and are listed separately):
 --   global_rank      everyone
 --   type_rank        e.g. best restaurants anywhere
 --   local_rank       everyone in the same city
 --   local_type_rank  e.g. best auto shops in Austin, TX
 
-create or replace view leaderboard
+-- Dropped first: create or replace can't change a view's columns.
+drop view if exists leaderboard;
+create view leaderboard
 with (security_invoker = true) as
 with latest as (
   select distinct on (business_id) *
@@ -117,10 +133,12 @@ select
   l.understand_score,
   l.act_score,
   l.audited_at,
-  rank() over (order by l.score desc)                                                        as global_rank,
-  rank() over (partition by b.business_type order by l.score desc)                           as type_rank,
-  rank() over (partition by b.country, b.region, b.city order by l.score desc)               as local_rank,
-  rank() over (partition by b.country, b.region, b.city, b.business_type order by l.score desc) as local_type_rank
+  l.status,
+  -- nulls last: Postgres sorts nulls first in descending order, which would rank blocked sites #1.
+  case when l.score is not null then rank() over (order by l.score desc nulls last) end                                                        as global_rank,
+  case when l.score is not null then rank() over (partition by b.business_type order by l.score desc nulls last) end                           as type_rank,
+  case when l.score is not null then rank() over (partition by b.country, b.region, b.city order by l.score desc nulls last) end               as local_rank,
+  case when l.score is not null then rank() over (partition by b.country, b.region, b.city, b.business_type order by l.score desc nulls last) end as local_type_rank
 from latest l
 join businesses b on b.id = l.business_id
 where b.listed;
