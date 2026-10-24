@@ -3,6 +3,7 @@ import { runAudit } from "@/lib/audit";
 import { logoUrl } from "@/lib/context-dev";
 import { FIX_LINK_PRICE_LABEL, paywallEnabled } from "@/lib/payments";
 import { AuditForm } from "../audit-form";
+import { BlockedReport } from "./blocked-report";
 import { SiteFooter, SiteHeader } from "../ui";
 import { ReportBody } from "./report-body";
 import { AgentEvaluationProgress } from "./AgentEvaluationProgress";
@@ -39,7 +40,7 @@ export default async function ReportPage({ searchParams }: Props) {
 
       <main className="mx-auto flex max-w-[960px] flex-col gap-12 px-6 py-12">
         {/* A finished report keeps the page about that site; the header's "Get my score" checks another. */}
-        {(!report || report.score == null) && (
+        {(!report || (report.score == null && !report.access)) && (
           <div id="check">
             <AuditForm defaultValue={url ?? ""} />
           </div>
@@ -52,14 +53,8 @@ export default async function ReportPage({ searchParams }: Props) {
           </div>
         )}
 
-        {report?.evaluationStatus === "blocked_by_site" && (
-          <div role="alert" className="rounded-2xl bg-warn-bg p-6">
-            <h1 className="font-display text-2xl font-bold">{new URL(report.url).hostname} blocked our check</h1>
-            <p className="mt-1 text-muted">
-              The site showed a bot challenge instead of its content, so it couldn&apos;t be scored. That isn&apos;t the same as a low score, but AI
-              assistants are likely blocked the same way.
-            </p>
-          </div>
+        {report?.evaluationStatus === "blocked_by_site" && report.access && (
+          <BlockedReport report={{ ...report, access: report.access }} logoSrc={logoUrl(new URL(report.url).hostname.replace(/^www\./, ""))} />
         )}
 
         {report && report.score != null && (

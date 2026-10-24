@@ -75,6 +75,16 @@ function blocksRoot(rules: string[] | undefined): boolean {
   return rules.includes("/") && !rules.includes("!allow-root");
 }
 
+/** The AI agents a robots.txt shuts out of the whole site. */
+export function robotsBlockedAgents(txt: string): string[] {
+  const groups = parseRobots(txt);
+  const wildcardBlocked = blocksRoot(groups.get("*"));
+  return AI_AGENTS.filter((a) => {
+    const rules = groups.get(a.toLowerCase());
+    return rules ? blocksRoot(rules) : wildcardBlocked;
+  });
+}
+
 /** Map a 0..1 share of "good" items onto the 0-4 rating scale. */
 function fromRatio(r: number): Rating {
   if (r >= 0.95) return 4;
@@ -267,12 +277,7 @@ export const checks: Check[] = [
           fix: `User-agent: *\nAllow: /\n\nSitemap: ${ctx.url.origin}/sitemap.xml`,
         };
       }
-      const groups = parseRobots(res.body);
-      const wildcardBlocked = blocksRoot(groups.get("*"));
-      const blocked = AI_AGENTS.filter((a) => {
-        const rules = groups.get(a.toLowerCase());
-        return rules ? blocksRoot(rules) : wildcardBlocked;
-      });
+      const blocked = robotsBlockedAgents(res.body);
       if (blocked.length === 0) {
         return { rating: 4, detail: "robots.txt lets all major AI agents in." };
       }

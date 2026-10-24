@@ -3,7 +3,7 @@ import { isIP } from "node:net";
 import type { Fetched } from "./types";
 
 export const USER_AGENT =
-  "Mozilla/5.0 (compatible; AgentReady/1.0; +https://github.com/agent-ready)";
+  "Mozilla/5.0 (compatible; AgentReady/1.0; +https://github.com/leoi137/agent-ready)";
 
 const TIMEOUT_MS = 8000;
 const MAX_BYTES = 2_000_000;
@@ -87,6 +87,7 @@ export async function safeFetch(raw: string): Promise<Fetched> {
         body: await readCapped(res),
         redirects,
         setCookies: res.headers.getSetCookie(),
+        headers: Object.fromEntries(res.headers),
         elapsedMs: Date.now() - started,
       };
     }

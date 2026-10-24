@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { detectBusiness } from "./business";
+import { describeBlock } from "./blocked";
 import { botChallenge, checks, collectDiagnostics } from "./checks";
 import { assertPublicUrl, safeFetch } from "./fetch";
 import { CATEGORIES, CATEGORY_ORDER, RUBRIC_VERSION, scoreCategory, scoreTotal } from "./rubric";
@@ -114,6 +115,7 @@ export async function runAudit(input: string, { tasks = [] }: AuditOptions = {})
   // A challenge page says nothing about the real site, so it gets no score.
   const blocked = botChallenge(page) != null;
   const { score, coverage } = blocked ? { score: null, coverage: 0 } : scoreTotal(categories);
+  const access = blocked ? await describeBlock(page, ctx.fetchPath) : undefined;
   const scoredTasks = tasks.filter((t) => t.status === "success" || t.status === "failed");
 
   return {
@@ -130,5 +132,6 @@ export async function runAudit(input: string, { tasks = [] }: AuditOptions = {})
     business: detectBusiness(ctx),
     tasks,
     diagnostics: collectDiagnostics(ctx),
+    ...(access && { access }),
   };
 }
