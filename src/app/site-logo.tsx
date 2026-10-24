@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /** A site's logo from Context.dev Logo Link; renders nothing if there's no logo. */
-export function SiteLogo({ src }: { src: string | null }) {
+export function SiteLogo({ src, size = 32 }: { src: string | null; size?: number }) {
   const [failed, setFailed] = useState(false);
   if (!src || failed) return null;
   return (
@@ -12,11 +12,12 @@ export function SiteLogo({ src }: { src: string | null }) {
     <img
       src={src}
       alt=""
-      width={32}
-      height={32}
+      width={size}
+      height={size}
       loading="lazy"
       onError={() => setFailed(true)}
-      className="h-8 w-8 flex-none rounded-lg bg-white object-contain p-0.5"
+      style={{ width: size, height: size }}
+      className="flex-none rounded-lg bg-white object-contain p-0.5"
     />
   );
 }

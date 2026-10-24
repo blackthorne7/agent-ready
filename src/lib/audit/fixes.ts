@@ -82,7 +82,8 @@ export async function generateFixes(input: string, brand?: Brand | null): Promis
       },
       sameAs: socials.length ? socials : undefined,
       openingHoursSpecification: [
-        { "@type": "OpeningHoursSpecification", dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"], opens: "09:00", closes: "17:00" },
+        // TODO rather than example hours: pasted as-is, made-up hours would be repeated to customers as fact.
+        { "@type": "OpeningHoursSpecification", dayOfWeek: "TODO", opens: "TODO", closes: "TODO" },
       ],
       potentialAction: { "@type": "SearchAction", target: `${origin}/search?q={query}`, "query-input": "required name=query" },
     },

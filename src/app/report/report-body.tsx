@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CATEGORY_ORDER } from "@/lib/audit/rubric";
 import type { Category, CheckResult, Report } from "@/lib/audit/types";
 import { ScoreRing, StatusRow, TONE, toneFor, type Tone } from "../ui";
+import { SiteLogo } from "../site-logo";
 import { AgentSection } from "./agent-section";
 import { FixLinkButton } from "./fix-link-button";
 
@@ -40,7 +41,7 @@ const pct = (n: number) => `${Math.round(n * 100)}%`;
  * The scored part of the report. Client-side so it can switch to the re-scored report the agent
  * section returns, which includes the rubric's task-based checks.
  */
-export function ReportBody({ initialReport }: { initialReport: Report & { score: number } }) {
+export function ReportBody({ initialReport, logoSrc = null }: { initialReport: Report & { score: number }; logoSrc?: string | null }) {
   const [report, setReport] = useState(initialReport);
   const [agentDone, setAgentDone] = useState(false);
   const cookies = report.checks.filter((c) => c.group === "cookies");
@@ -51,7 +52,10 @@ export function ReportBody({ initialReport }: { initialReport: Report & { score:
         <ScoreRing score={report.score} caption={`Grade ${report.grade}`} />
         <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4">
           <div>
-            <h1 className="truncate font-display text-[28px] font-bold">{new URL(report.url).hostname}</h1>
+            <div className="flex min-w-0 items-center gap-3">
+              <SiteLogo src={logoSrc} size={40} />
+              <h1 className="truncate font-display text-[28px] font-bold">{new URL(report.url).hostname}</h1>
+            </div>
             <p className="text-[15px] text-muted">Checked {new Date(report.auditedAt).toUTCString()}</p>
             <p className="text-[15px] text-muted">
               {pct(report.coverage)} of the checklist measured
