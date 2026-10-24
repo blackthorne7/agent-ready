@@ -23,6 +23,17 @@ pnpm dev
 
 Checks live in `src/lib/audit/checks.ts`. Each check is a `{ id, category, title, weight, run(ctx) }` object, so adding one is a single array entry.
 
+## Agent runner
+
+`lib/agent/` runs a tool-calling agent that tries a task on a site (e.g. "book a demo") and records each step.
+
+```bash
+AGENT_STUB=1 pnpm agent https://example.com "find pricing"   # fake steps, no model
+pnpm agent https://example.com "book a demo"                 # needs ANTHROPIC_API_KEY
+```
+
+Env vars are listed in `.env.example`. Supabase tables: `lib/agent/schema.sql`. `lib/page.ts` is still a stub serving a fake site.
+
 ## Deploy (Unikraft Cloud)
 
 Requires Docker and `unikraft login`.
