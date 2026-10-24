@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentResult, AgentStep, FetchResult } from "../types";
 import { callModel, type ChatMessage, type ToolResult } from "./model";
+import { saveRunResult, saveRunStart, saveStep } from "./persist";
 import { buildSystemPrompt } from "./prompt";
 import { runStub } from "./stub";
 import { executeTool, normalizeUrl, TOOL_DEFINITIONS, type ToolOutput } from "./tools";
@@ -70,6 +71,7 @@ export async function runAgent({ url, task, maxSteps = 10, onStep }: RunAgentOpt
   const emit = async (step: AgentStep) => {
     steps.push(step);
     console.log(`${tag} step ${step.n} ${step.action} ${step.outcome}`);
+    await saveStep(step);
     try {
       await onStep?.(step);
     } catch (err) {
@@ -79,6 +81,8 @@ export async function runAgent({ url, task, maxSteps = 10, onStep }: RunAgentOpt
 
   const stub = process.env.AGENT_STUB === "1";
   console.log(`${tag} start url=${url} task="${task}" maxSteps=${maxSteps} stub=${stub}`);
+
+  await saveRunStart(runId, url, task);
 
   let result: AgentResult;
   try {
@@ -94,6 +98,7 @@ export async function runAgent({ url, task, maxSteps = 10, onStep }: RunAgentOpt
         : { status: "error", reason: `Agent runner error: ${msg}` };
   }
 
+  await saveRunResult(runId, result, steps.length);
   console.log(`${tag} done status=${result.status} in ${((Date.now() - startedAt) / 1000).toFixed(1)}s reason="${result.reason}"`);
   return { runId, steps, result };
 }
