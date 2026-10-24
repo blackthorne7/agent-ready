@@ -254,6 +254,11 @@ function copyLabel({ state, locked, priceLabel }: FixLink): string {
   return "Copy my fix link";
 }
 
+/** Same paywall as copying: both export the fix link, and one payment unlocks both. */
+function sendLabel({ locked, priceLabel }: FixLink): string {
+  return locked ? `Send to my web person · ${priceLabel}` : "Send to my web person";
+}
+
 function Status({ fix, from }: { fix: FixLink; from: Source }) {
   const { state } = fix;
   if (state.kind === "idle" || state.from !== from) return null;
@@ -308,7 +313,7 @@ function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
   return (
     <p className={className}>
       {fix.newReport && <strong>Your site changed since you paid, so this is a new report. </strong>}
-      {fix.priceLabel} for this report&apos;s fix link; the report itself stays free. Re-checking without changes stays unlocked; a new report after
+      {fix.priceLabel} for this report&apos;s fix link, whether you copy it or send it to your web person; the report itself stays free. Re-checking without changes stays unlocked; a new report after
       changes is {fix.priceLabel} again. Demo checkout (Stripe test mode): pay with card <span className="font-mono">4242 4242 4242 4242</span>, any
       future date and any CVC. No real money is charged.
     </p>
@@ -402,7 +407,7 @@ export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
             disabled={fix.busy}
             className="min-h-[52px] rounded-xl border-2 border-white px-5 text-lg font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
           >
-            Send to my web person
+            {sendLabel(fix)}
           </button>
         </div>
       </div>
