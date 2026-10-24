@@ -9,7 +9,7 @@
     "lint": "eslint",
     "agent": "tsx lib/agent/cli.ts",
     "evaluate": "tsx lib/agent/evaluate.ts",
-    "test": "tsx --test src/lib/audit/*.test.ts"
+    "test": "tsx --test src/lib/*.test.ts src/lib/audit/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.2.0",

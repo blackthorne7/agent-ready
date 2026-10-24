@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { runAudit } from "@/lib/audit";
-import { saveAudit } from "@/lib/audit/save";
 import { logoUrl } from "@/lib/context-dev";
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader } from "../ui";
@@ -30,7 +29,6 @@ export default async function ReportPage({ searchParams }: Props) {
     );
   }
   const report = url ? await runAudit(url) : null;
-  if (report) await saveAudit(report);
 
   return (
     <div className="text-[17px] leading-[1.55]">
