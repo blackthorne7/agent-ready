@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { logoUrl } from "@/lib/context-dev";
 import { getFilters, getLeaderboard } from "@/lib/leaderboard";
 // Location filter paused: re-add parsePlace, placeLabel to the import above.
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader, TONE, toneFor } from "../ui";
+import { SiteLogo } from "./site-logo";
 
 export const dynamic = "force-dynamic";
 
@@ -177,6 +179,7 @@ export default async function LeaderboardPage({ searchParams }: Props) {
                         >
                           {r.rank}
                         </span>
+                        <SiteLogo src={logoUrl(r.domain)} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-semibold">{r.name ?? r.domain}</span>
                           {meta.length > 0 && (

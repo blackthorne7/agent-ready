@@ -5,6 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { generateFixes } from "./audit/fixes";
 import type { CheckResult } from "./audit/types";
+import { getBrand } from "./context-dev";
 import { adminDb, publicDb } from "./supabase";
 
 const SLUG_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // no look-alikes (i/l/1, o/0)
@@ -27,6 +28,8 @@ export async function createFixLink(siteUrl: string): Promise<string> {
   const db = adminDb();
   if (!db) throw new FixLinkError("Fix links aren't set up on this server (Supabase isn't configured).", 503);
 
+  // Brand details (address, description, socials) fill in the drafted files; looked up meanwhile.
+  const brand = getBrand(new URL(siteUrl).hostname.replace(/^www\./, ""), 20_000);
   const { data: audit, error } = await db
     .from("audits")
     .select("id")
@@ -37,7 +40,7 @@ export async function createFixLink(siteUrl: string): Promise<string> {
   if (error) throw new Error(error.message);
   if (!audit) throw new FixLinkError("No saved audit for this site yet. Run the check first.", 404);
 
-  const fixes = await generateFixes(siteUrl);
+  const fixes = await generateFixes(siteUrl, await brand);
   const slug = newSlug();
   const { error: insertError } = await db.from("fix_links").insert({
     slug,

@@ -1,8 +1,9 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-import { runAudit } from "@/lib/audit";
+import { normalizeUrl, runAudit } from "@/lib/audit";
 import { generateFixes } from "@/lib/audit/fixes";
 import { saveAudit } from "@/lib/audit/save";
+import { getBrand } from "@/lib/context-dev";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,8 @@ const handler = createMcpHandler(
         inputSchema: z.object({ url: z.string().describe("Website URL or domain") }),
       },
       async ({ url }) => {
-        const fixes = await generateFixes(url);
+        const brand = await getBrand(new URL(normalizeUrl(url)).hostname.replace(/^www\./, ""), 15_000);
+        const fixes = await generateFixes(url, brand);
         return {
           content: [{ type: "text", text: JSON.stringify(fixes, null, 2) }],
           structuredContent: fixes as unknown as Record<string, unknown>,
