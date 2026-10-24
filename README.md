@@ -89,9 +89,11 @@ unikraft run --metro sfo --name agent-ready -m 1024M --set service=snowy-thunder
   -e OMNARA_ORG_ID="$OMNARA_ORG_ID" \
   -e OMNARA_PROJECT_ID="$OMNARA_PROJECT_ID" \
   -e OMNARA_MODEL="${OMNARA_MODEL:-anthropic/claude-sonnet-5.5}" \
+  -e CONTEXT_DEV_API_KEY="$CONTEXT_DEV_API_KEY" \
+  -e LOGOLINK_CLIENT_ID="$LOGOLINK_CLIENT_ID" \
   --image agent-ready/agent-ready:latest
 ```
 
-`.env` must have both the Supabase vars and the `OMNARA_*` vars (see `.env.example`). Leaving the Omnara ones out deploys a site where the agent section fails. Instance env vars can't be added later with `-e` (that replaces the whole env); use `unikraft instances edit agent-ready --add runtime.env=KEY=value` instead.
+`.env` must have the Supabase, `OMNARA_*` and Context.dev (`CONTEXT_DEV_API_KEY`, `LOGOLINK_CLIENT_ID`) vars; see `.env.example`. Nothing errors if one is missing: without the Omnara vars the agent section fails, and without the Context.dev ones logos disappear and categories and fix plans fall back to keywords and TODOs. Instance env vars can't be added later with `-e` (that replaces the whole env); use `unikraft instances edit agent-ready --add runtime.env=KEY=value` instead. Edits to env or image only take effect while the instance is stopped: `unikraft instances stop agent-ready`, edit, then `unikraft instances start agent-ready`.
 
 If `instances delete agent-ready` reports "not found", run `unikraft instances list` and delete whatever is on `snowy-thunder` by its UUID.
