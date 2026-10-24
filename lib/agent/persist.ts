@@ -3,6 +3,7 @@
 // Table definitions: lib/agent/schema.sql
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { Report } from "../../src/lib/audit";
 import type { AgentResult, AgentStep } from "../types";
 
 let client: SupabaseClient | null | undefined;
@@ -64,5 +65,20 @@ export function saveRunResult(runId: string, result: AgentResult, stepCount: num
         finished_at: new Date().toISOString(),
       })
       .eq("run_id", runId),
+  );
+}
+
+export function saveReport(report: Report, runIds: string[]) {
+  return write("report", (c) =>
+    c.from("audit_reports").insert({
+      url: report.url,
+      rubric_version: report.rubricVersion,
+      score: report.score,
+      coverage: report.coverage,
+      task_success_rate: report.taskSuccessRate,
+      category_scores: report.categories,
+      report,
+      run_ids: runIds,
+    }),
   );
 }
