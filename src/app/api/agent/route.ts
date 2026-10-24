@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { normalizeUrl, runAudit } from "@/lib/audit";
+import { applyBrand } from "@/lib/audit/business";
 import { assertPublicUrl } from "@/lib/audit/fetch";
 import { saveAudit } from "@/lib/audit/save";
+import { getBrand } from "@/lib/context-dev";
 import { runAgentTasks, toTaskRun } from "../../../../lib/agent/tasks";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +29,11 @@ export async function POST(req: Request) {
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: 400 });
   }
 
+  // The brand lookup (industry, location) runs alongside the agent, so it adds no wait.
+  const brand = getBrand(new URL(url).hostname.replace(/^www\./, ""));
   const tasks = await runAgentTasks(url);
   const report = await runAudit(url, { tasks: tasks.map(toTaskRun) });
+  report.business = applyBrand(report.business, await brand);
   // Saved as the site's latest audit, so the leaderboard ranks the score that includes the agent.
   await saveAudit(report);
   return Response.json({ url, tasks, report });
