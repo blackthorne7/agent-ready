@@ -1,0 +1,95 @@
+# Deploys main to the live Unikraft instance on every merge. Only the image changes: the instance's
+# env (Supabase, Omnara, Context.dev, Stripe keys) is kept as is. Needs the UNIKRAFT_TOKEN repo secret.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time; a merge during a deploy waits for it, then deploys the newer main.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  INSTANCE: agent-ready
+  IMAGE: agent-ready/agent-ready
+  SITE: https://snowy-thunder-epw3bj03.sfo.unikraft.app
+  UNIKRAFT_CLI_VERSION: 0.6.2
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Type-checking and lint run inside the image build (next build); the unit tests don't.
+      - name: Unit tests
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm test
+
+      - name: Install the Unikraft CLI
+        run: |
+          curl --proto '=https' --tlsv1.2 -fsSL https://unikraft.com/cli/install.sh \
+            | UNIKRAFT_CLI_INSTALL_VERSION="v$UNIKRAFT_CLI_VERSION" UNIKRAFT_CLI_INSTALL_BIN_DIR="$HOME/.local/bin" sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Log in to Unikraft
+        env:
+          UNIKRAFT_TOKEN: ${{ secrets.UNIKRAFT_TOKEN }}
+        run: |
+          test -n "$UNIKRAFT_TOKEN" || { echo "::error::Add the UNIKRAFT_TOKEN repository secret"; exit 1; }
+          mkdir -p ~/.config/unikraft
+          umask 077
+          cat > ~/.config/unikraft/config.yaml <<EOF
+          profiles:
+            agent-ready:
+              type: cloud
+              token: $UNIKRAFT_TOKEN
+              organization: agent-ready
+              metros:
+                - name: sfo
+                  endpoint: https://api.sfo.unikraft.cloud
+          profile: agent-ready
+          EOF
+          unikraft instances get "$INSTANCE" -o yaml | grep -E '^\s*(image|state):'
+
+      - name: Build and push the image
+        run: |
+          TAG="$IMAGE:${GITHUB_SHA::12}"
+          unikraft build . --output "$TAG"
+          DIGEST=$(unikraft images list -o json | jq -r --arg ref "$TAG" '.[] | select(.ref == $ref) | .digest' | head -1)
+          test -n "$DIGEST" || { echo "::error::Pushed $TAG but couldn't find its digest"; exit 1; }
+          echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
+          echo "Built $TAG ($DIGEST)"
+
+      # Image edits only apply to a stopped instance. If the edit fails, it starts again on the old image.
+      - name: Swap the live image
+        run: |
+          unikraft instances stop "$INSTANCE"
+          trap 'unikraft instances start "$INSTANCE" || true' EXIT
+          unikraft instances edit "$INSTANCE" --image "$IMAGE@$DIGEST"
+          trap - EXIT
+          unikraft instances start "$INSTANCE"
+          unikraft instances get "$INSTANCE" -o yaml | grep -E '^\s*(image|state):'
+
+      - name: Check the live site
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$SITE/") || true
+            [ "$code" = 200 ] && { echo "Live: $SITE"; exit 0; }
+            sleep 2
+          done
+          echo "::error::$SITE returned $code after the deploy"
+          exit 1
