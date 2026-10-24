@@ -1,0 +1,7 @@
+node_modules/
+.next/
+/.unikraft/
+.env*
+.git/
+/Kraftfile
+/Dockerfile
