@@ -43,23 +43,40 @@ describe("/api/checkout/restore", () => {
     );
   };
 
-  it("unlocks only with the email that paid for this site, with one answer for every miss", async () => {
+  it("unlocks only with the email that paid for this site's current report, with one answer for every miss", async () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_123";
+    // Stripe answers by email; every other fetch is the audited site (one fixed page, so its report is stable).
+    let paidReport = "";
     globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const email = new URL(String(input)).searchParams.get("customer_details[email]");
-      const data = email === "owner@example.com" ? [{ id: "cs_test_paid1", payment_status: "paid", metadata: { domain: "example.com" } }] : [];
+      const url = new URL(String(input));
+      if (url.hostname !== "api.stripe.com") return new Response("<html><head><title>Shop</title></head><body><h1>Shop</h1></body></html>", { status: 200, headers: { "content-type": "text/html" } });
+      const email = url.searchParams.get("customer_details[email]");
+      const data =
+        email === "owner@example.com"
+          ? [{ id: "cs_test_paid1", payment_status: "paid", metadata: { domain: "example.com", report: paidReport } }]
+          : email === "early@example.com"
+            ? [{ id: "cs_test_early", payment_status: "paid", metadata: { domain: "example.com", report: "an-earlier-report" } }]
+            : [];
       return new Response(JSON.stringify({ data }), { status: 200 });
     }) as typeof fetch;
+    const { currentReportFingerprint } = await import("./report-fingerprint");
+    paidReport = await currentReportFingerprint("https://example.com/");
 
     const ok = await restore({ url: "https://example.com/", email: "owner@example.com" });
     assert.equal(ok.status, 200);
     assert.deepEqual(await ok.json(), { checkout: "cs_test_paid1" });
 
-    const wrongEmail = await restore({ url: "https://example.com/", email: "stranger@example.com" });
-    const wrongSite = await restore({ url: "https://another.com/", email: "owner@example.com" });
-    assert.equal(wrongEmail.status, 404);
-    assert.equal(wrongSite.status, 404);
-    assert.deepEqual(await wrongEmail.json(), await wrongSite.json());
+    const misses = await Promise.all([
+      restore({ url: "https://example.com/", email: "stranger@example.com" }),
+      restore({ url: "https://another.com/", email: "owner@example.com" }),
+      restore({ url: "https://example.com/", email: "early@example.com" }), // paid, but for an earlier report
+    ]);
+    assert.deepEqual(
+      misses.map((r) => r.status),
+      [404, 404, 404],
+    );
+    const bodies = await Promise.all(misses.map((r) => r.json()));
+    assert.ok(bodies.every((b) => b.error === bodies[0].error));
 
     assert.equal((await restore({ url: "https://example.com/", email: "not-an-email" })).status, 400);
   });

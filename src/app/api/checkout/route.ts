@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { RateLimiter, clientIp } from "@/lib/limits";
 import { PaymentError, createCheckout, paywallEnabled, siteOrigin } from "@/lib/payments";
+import { currentReportFingerprint } from "@/lib/report-fingerprint";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,7 +18,10 @@ export async function POST(req: Request) {
   const ip = clientIp(req);
   if (ip && !perVisitor.take(ip)) return Response.json({ error: "Too many checkout attempts in the last hour. Try again later." }, { status: 429 });
   try {
-    return Response.json({ checkoutUrl: await createCheckout(parsed.data.url, siteOrigin(req)) });
+    const origin = siteOrigin(req);
+    // The payment covers the report the visitor is looking at.
+    const report = await currentReportFingerprint(parsed.data.url);
+    return Response.json({ checkoutUrl: await createCheckout(parsed.data.url, origin, report) });
   } catch (err) {
     console.error("[checkout]", err);
     return Response.json({ error: err instanceof Error ? err.message : String(err) }, { status: err instanceof PaymentError ? err.status : 500 });

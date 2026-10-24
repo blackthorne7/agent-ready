@@ -54,10 +54,11 @@ const plans = [
   {
     name: "Fix link",
     price: FIX_LINK_PRICE_LABEL,
-    per: "one time, per website",
+    per: "per report",
     body: "Export every fix to your AI website builder in one link.",
     features: [
       "Everything in the free score",
+      "Re-check for free if nothing changed",
       "Every fix, ranked by impact",
       "One prompt your builder's AI follows to make the changes",
       "Ready-made files: llms.txt, structured data, robots.txt",

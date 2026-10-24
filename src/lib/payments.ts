@@ -59,14 +59,19 @@ async function stripe<T>(path: string, init: { method: "GET" | "POST"; form?: Re
 interface CheckoutSession {
   id: string;
   url: string | null;
+  status?: "open" | "complete" | "expired";
   payment_status: "paid" | "unpaid" | "no_payment_required";
   metadata: Record<string, string> | null;
 }
 
-/** A Stripe Checkout page for one site's fix link. Returns to the report with ?checkout=<session id>. */
-export async function createCheckout(siteUrl: string, origin: string): Promise<string> {
+/**
+ * A Stripe Checkout page for one report's fix link: `report` is the report's fingerprint
+ * (src/lib/report-fingerprint.ts), so the payment covers that report and re-checks that come out the same.
+ * Returns to the report with ?checkout=<session id>.
+ */
+export async function createCheckout(siteUrl: string, origin: string, report: string): Promise<string> {
   const domain = siteDomain(siteUrl);
-  const report = `${origin}/report?url=${encodeURIComponent(siteUrl)}`;
+  const back = `${origin}/report?url=${encodeURIComponent(siteUrl)}`;
   const session = await stripe<CheckoutSession>("/checkout/sessions", {
     method: "POST",
     form: {
@@ -75,33 +80,55 @@ export async function createCheckout(siteUrl: string, origin: string): Promise<s
       "line_items[0][price_data][currency]": "usd",
       "line_items[0][price_data][unit_amount]": String(FIX_LINK_PRICE_CENTS),
       "line_items[0][price_data][product_data][name]": `Fix link for ${domain}`,
-      "line_items[0][price_data][product_data][description]": "Every fix for this website in one link, ready to paste into your AI website builder.",
+      "line_items[0][price_data][product_data][description]": "Every fix from this report in one link, ready to paste into your AI website builder.",
       "metadata[domain]": domain,
+      "metadata[report]": report,
+      // Promotion codes (created in the Stripe dashboard) can be entered on the checkout page.
+      allow_promotion_codes: "true",
       // Stripe fills in {CHECKOUT_SESSION_ID}; it must stay unencoded.
-      success_url: `${report}&checkout={CHECKOUT_SESSION_ID}`,
-      cancel_url: report,
+      success_url: `${back}&checkout={CHECKOUT_SESSION_ID}`,
+      cancel_url: back,
     },
   });
   if (!session.url) throw new PaymentError("Stripe didn't return a checkout page.", 502);
   return session.url;
 }
 
-// Paid sessions never become unpaid, so verified ones are remembered for the life of the process.
-const verified = new Map<string, string>();
+/** Paid in full, or completed at $0 with a 100%-off promotion code (Stripe reports that as no_payment_required). */
+function settled(s: CheckoutSession): boolean {
+  return s.payment_status === "paid" || (s.payment_status === "no_payment_required" && s.status === "complete");
+}
 
-/** True if `sessionId` is a paid Checkout Session for this site's domain. */
-export async function isPaid(sessionId: string | undefined, siteUrl: string): Promise<boolean> {
-  if (!sessionId || !/^cs_test_[A-Za-z0-9]+$/.test(sessionId)) return false;
+// Paid sessions never become unpaid, so their domain and report are remembered for the life of the process.
+const verified = new Map<string, { domain: string; report: string }>();
+
+/**
+ * "paid": a paid Checkout Session for this site and for the report the visitor is on now.
+ * "new-report": paid for this site, but for an earlier report (the site changed since), so it needs a new payment.
+ * "unpaid": anything else, including Stripe errors (fails closed).
+ * `currentReport` gives the current report's fingerprint; it's only computed once the session itself checks out,
+ * so made-up session ids cost one Stripe lookup and nothing more.
+ */
+export async function checkPayment(
+  sessionId: string | undefined,
+  siteUrl: string,
+  currentReport: () => Promise<string>,
+): Promise<"paid" | "new-report" | "unpaid"> {
+  if (!sessionId || !/^cs_test_[A-Za-z0-9]+$/.test(sessionId)) return "unpaid";
   const domain = siteDomain(siteUrl);
-  if (verified.get(sessionId) === domain) return true;
   try {
-    const session = await stripe<CheckoutSession>(`/checkout/sessions/${sessionId}`, { method: "GET" });
-    if (session.payment_status !== "paid" || session.metadata?.domain !== domain) return false;
-    verified.set(sessionId, domain);
-    return true;
+    let paid = verified.get(sessionId);
+    if (!paid) {
+      const session = await stripe<CheckoutSession>(`/checkout/sessions/${sessionId}`, { method: "GET" });
+      if (!settled(session) || !session.metadata?.domain || !session.metadata.report) return "unpaid";
+      paid = { domain: session.metadata.domain, report: session.metadata.report };
+      verified.set(sessionId, paid);
+    }
+    if (paid.domain !== domain) return "unpaid";
+    return paid.report === (await currentReport()) ? "paid" : "new-report";
   } catch (err) {
     console.error("[payments] verify failed:", err instanceof Error ? err.message : err);
-    return false;
+    return "unpaid";
   }
 }
 
@@ -110,17 +137,17 @@ interface SessionList {
 }
 
 /**
- * "Already paid?": the paid Checkout Session for this site bought with `email`, or null.
+ * "Already paid?": the paid Checkout Session for this site and report bought with `email`, or null.
  * Lets a buyer unlock again after clearing storage or on another device, without unlocking the site for everyone.
  * Proves knowledge of the checkout email, not ownership of the inbox; an emailed one-time code would.
  */
-export async function findPaidSession(email: string, siteUrl: string): Promise<string | null> {
+export async function findPaidSession(email: string, siteUrl: string, report: string): Promise<string | null> {
   const domain = siteDomain(siteUrl);
   const params = new URLSearchParams({ "customer_details[email]": email.trim().toLowerCase(), status: "complete", limit: "100" });
   const { data } = await stripe<SessionList>(`/checkout/sessions?${params}`, { method: "GET" });
-  const session = data.find((s) => s.payment_status === "paid" && s.metadata?.domain === domain);
+  const session = data.find((s) => settled(s) && s.metadata?.domain === domain && s.metadata?.report === report);
   if (!session) return null;
-  verified.set(session.id, domain);
+  verified.set(session.id, { domain, report });
   return session.id;
 }
 

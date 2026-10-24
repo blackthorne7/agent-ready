@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { FixLinkError, createFixLink } from "@/lib/fix-links";
 import { RateLimiter, clientIp } from "@/lib/limits";
-import { FIX_LINK_PRICE_LABEL, isPaid, paywallEnabled } from "@/lib/payments";
+import { FIX_LINK_PRICE_LABEL, checkPayment, paywallEnabled } from "@/lib/payments";
+import { currentReportFingerprint } from "@/lib/report-fingerprint";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,8 +25,17 @@ export async function POST(req: Request) {
     return Response.json({ error: "Too many fix links created in the last hour. Try again later." }, { status: 429 });
   }
   // Checked here, not just in the page: the paywall has to hold for direct API calls too.
-  if (paywallEnabled() && !(await isPaid(parsed.data.checkout, parsed.data.url))) {
-    return Response.json({ error: `The fix link costs ${FIX_LINK_PRICE_LABEL}. Pay first to export it.`, paymentRequired: true }, { status: 402 });
+  // A payment covers one report; a re-check that comes out different needs a new one.
+  if (paywallEnabled()) {
+    const { url, checkout } = parsed.data;
+    const payment = await checkPayment(checkout, url, () => currentReportFingerprint(url));
+    if (payment !== "paid") {
+      const error =
+        payment === "new-report"
+          ? `Your site changed since you paid, so this is a new report. Its fix link costs ${FIX_LINK_PRICE_LABEL}.`
+          : `The fix link costs ${FIX_LINK_PRICE_LABEL}. Pay first to export it.`;
+      return Response.json({ error, paymentRequired: true, newReport: payment === "new-report" }, { status: 402 });
+    }
   }
   try {
     const slug = await createFixLink(parsed.data.url);

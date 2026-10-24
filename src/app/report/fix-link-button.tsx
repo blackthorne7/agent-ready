@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 /** How long the "Link copied" message shows before the fix page opens. */
 const OPEN_AFTER_MS = 2500;
@@ -23,7 +23,15 @@ export interface Payment {
   checkout?: string;
 }
 
-class PaymentRequired extends Error {}
+class PaymentRequired extends Error {
+  constructor(
+    message: string,
+    /** Paid for an earlier report of this site; it changed since, so this report needs a new payment. */
+    readonly newReport: boolean,
+  ) {
+    super(message);
+  }
+}
 
 async function createFixLink(url: string, checkout: string | undefined): Promise<string> {
   const res = await fetch("/api/fix-link", {
@@ -32,7 +40,7 @@ async function createFixLink(url: string, checkout: string | undefined): Promise
     body: JSON.stringify({ url, checkout }),
   });
   const body = await res.json().catch(() => ({}));
-  if (res.status === 402) throw new PaymentRequired(body.error ?? "Payment required");
+  if (res.status === 402) throw new PaymentRequired(body.error ?? "Payment required", !!body.newReport);
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
   return new URL(body.path, window.location.origin).toString();
 }
@@ -58,6 +66,18 @@ async function restorePayment(url: string, email: string): Promise<string> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.checkout) throw new Error(body.error ?? `Request failed (${res.status})`);
   return body.checkout;
+}
+
+/** Whether a stored payment still covers this site's current report. */
+async function paymentStatus(url: string, checkout: string): Promise<"paid" | "new-report" | "unpaid"> {
+  const res = await fetch("/api/checkout/status", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url, checkout }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return body.status;
 }
 
 // A paid session is remembered per site in this browser, so a reload or a later visit doesn't ask again.
@@ -108,6 +128,8 @@ export type FixLink = ReturnType<typeof useFixLink>;
 export function useFixLink(url: string, payment: Payment = { required: false, priceLabel: "" }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [paidSession, setPaidSession] = useState<string | undefined>(payment.checkout);
+  // The stored payment was for an earlier report: the site changed since, so this one needs a new payment.
+  const [newReport, setNewReport] = useState(false);
   const pending = useRef<{ url: string; href: Promise<string> } | null>(null);
   const busy = state.kind === "creating";
   const locked = payment.required && !paidSession;
@@ -124,6 +146,26 @@ export function useFixLink(url: string, payment: Payment = { required: false, pr
       setPaidSession(readPaid(url));
     }
   }, [url, payment.required, payment.checkout]);
+
+  const forget = useCallback(
+    (changed: boolean) => {
+      writePaid(url, null);
+      setPaidSession(undefined);
+      setNewReport(changed);
+    },
+    [url],
+  );
+
+  /** Re-checks a stored payment against this report, so "Paid" never shows for a report it doesn't cover. */
+  const verify = useCallback(async () => {
+    if (!payment.required || !paidSession) return;
+    try {
+      const status = await paymentStatus(url, paidSession);
+      if (status !== "paid") forget(status === "new-report");
+    } catch {
+      // Can't tell right now; /api/fix-link checks again before exporting.
+    }
+  }, [url, payment.required, paidSession, forget]);
 
   useEffect(() => {
     if (state.kind !== "copied" || state.staying) return;
@@ -142,11 +184,8 @@ export function useFixLink(url: string, payment: Payment = { required: false, pr
     if (pending.current?.url !== url) {
       const href = createFixLink(url, paidSession).catch((err) => {
         pending.current = null;
-        // A stored session that no longer verifies (other site, refunded): forget it and lock again.
-        if (err instanceof PaymentRequired) {
-          writePaid(url, null);
-          setPaidSession(undefined);
-        }
+        // A stored session that no longer covers this report: forget it and lock again.
+        if (err instanceof PaymentRequired) forget(err.newReport);
         throw err;
       });
       pending.current = { url, href };
@@ -200,10 +239,11 @@ export function useFixLink(url: string, payment: Payment = { required: false, pr
     const session = await restorePayment(url, email);
     writePaid(url, session);
     setPaidSession(session);
+    setNewReport(false);
     pending.current = null;
   }
 
-  return { state, busy, locked, restore, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
+  return { state, busy, locked, restore, verify, newReport, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
 }
 
 function copyLabel({ state, locked, priceLabel }: FixLink): string {
@@ -263,12 +303,14 @@ function Status({ fix, from }: { fix: FixLink; from: Source }) {
 
 /** Price and demo card while locked; a receipt line once paid. Nothing when there's no paywall. */
 function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
-  if (fix.paid) return <p className={className}>Paid ✓ Your fix link for this site is unlocked.</p>;
+  if (fix.paid) return <p className={className}>Paid ✓ Your fix link for this report is unlocked.</p>;
   if (!fix.locked) return null;
   return (
     <p className={className}>
-      One-time {fix.priceLabel} for this website. The report stays free. Demo checkout (Stripe test mode): pay with card{" "}
-      <span className="font-mono">4242 4242 4242 4242</span>, any future date and any CVC. No real money is charged.
+      {fix.newReport && <strong>Your site changed since you paid, so this is a new report. </strong>}
+      {fix.priceLabel} for this report&apos;s fix link; the report itself stays free. Re-checking without changes stays unlocked; a new report after
+      changes is {fix.priceLabel} again. Demo checkout (Stripe test mode): pay with card <span className="font-mono">4242 4242 4242 4242</span>, any
+      future date and any CVC. No real money is charged.
     </p>
   );
 }
@@ -329,6 +371,11 @@ function RestorePayment({ fix }: { fix: FixLink }) {
 
 /** The report's main call to action. */
 export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
+  // The banner shows with the final, saved report, so this is when a stored payment can be checked against it.
+  const { verify } = fix;
+  useEffect(() => {
+    void verify();
+  }, [verify]);
   return (
     <section aria-labelledby="fix-link-title" className="flex flex-col gap-5 rounded-3xl bg-accent-strong p-7 text-white sm:p-9">
       <div className="flex flex-wrap items-center justify-between gap-6">
