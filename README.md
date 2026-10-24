@@ -49,10 +49,19 @@ Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (a
 
 Requires Docker and `unikraft login`.
 
+Deploys attach to the existing `snowy-thunder-epw3bj03` service so the URL never changes. Supabase env is read from `.env` (it isn't baked into the image).
+
 ```bash
 unikraft build . --output agent-ready/agent-ready:latest
 unikraft instances delete agent-ready
-unikraft run --metro sfo --name agent-ready -m 1024M -p 443:3000/tls+http \
+set -a && . ./.env && set +a
+unikraft run --metro sfo --name agent-ready -m 1024M --set service=snowy-thunder-epw3bj03 \
   -e HOSTNAME=0.0.0.0 -e PORT=3000 -e NODE_ENV=production \
+  -e SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+  -e NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+  -e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+  -e SUPABASE_SERVICE_ROLE_KEY="$SUPABASE_SERVICE_ROLE_KEY" \
   --image agent-ready/agent-ready:latest
 ```
+
+If `instances delete agent-ready` reports "not found", run `unikraft instances list` and delete whatever is on `snowy-thunder` by its UUID.
