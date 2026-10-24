@@ -4,10 +4,11 @@ import { saveAudit } from "@/lib/audit/save";
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader } from "../ui";
 import { ReportBody } from "./report-body";
+import { AgentEvaluationProgress } from "./AgentEvaluationProgress";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ url?: string }> };
+type Props = { searchParams: Promise<{ url?: string; demo?: string }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { url } = await searchParams;
@@ -15,7 +16,18 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 }
 
 export default async function ReportPage({ searchParams }: Props) {
-  const { url } = await searchParams;
+  const { url, demo } = await searchParams;
+  if (demo === "1") {
+    return (
+      <div className="text-[17px] leading-[1.55]">
+        <SiteHeader />
+        <main className="mx-auto flex max-w-[1040px] flex-col gap-10 px-6 py-12">
+          <AgentEvaluationProgress mode="demo" />
+        </main>
+        <SiteFooter />
+      </div>
+    );
+  }
   const report = url ? await runAudit(url) : null;
   if (report) await saveAudit(report);
 

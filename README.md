@@ -44,6 +44,17 @@ pnpm test                                       # scoring + check unit tests
 AGENT_STUB=1 pnpm evaluate https://example.com  # agent tasks + audit, saves reports/*.json
 ```
 
+### Live evaluation progress demo
+
+Start the development server and open `/report?url=example.com&demo=1` to preview the waiting experience:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Then visit `http://localhost:3000/report?url=example.com&demo=1`. The demo displays three evaluation stages at a time, greys out completed stages, rotates the friendly status messages, and exposes simulated technical details through the **Details** buttons. The progress UI is in `src/app/report/AgentEvaluationProgress.tsx` and is shown at the top by `src/app/report/loading.tsx` while the existing report is generated; the score and result graph remain separate.
+
 ## Agent runner
 
 `lib/agent/` runs a tool-calling agent that tries a task on a site (e.g. "book a demo") and records each step.
