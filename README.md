@@ -17,7 +17,7 @@ Three directions to choose from, side by side on one canvas: https://claude.ai/a
 ## Use it
 
 - **Web:** `/report?url=example.com` (server-rendered, works without JavaScript)
-- **Leaderboard:** `/leaderboard`, filter by `?type=restaurant` and `?place=Austin|TX|US`
+- **Leaderboard:** `/leaderboard`, filter by `?type=restaurant` (location filter paused)
 - **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }`
 - **MCP server:** `/api/mcp` (streamable HTTP), tools `audit_site` and `generate_fixes`
 

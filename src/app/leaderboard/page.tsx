@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getFilters, getLeaderboard, parsePlace, placeLabel } from "@/lib/leaderboard";
+import { getFilters, getLeaderboard } from "@/lib/leaderboard";
+// Location filter paused: re-add parsePlace, placeLabel to the import above.
 import { AuditForm } from "../audit-form";
 import { SiteFooter, SiteHeader, TONE, toneFor } from "../ui";
 
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Leaderboard: the most AI-ready websites",
-  description: "Websites ranked by how well AI assistants can find them, understand them and act for customers. Filter by business type and city.",
+  description: "Websites ranked by how well AI assistants can find them, understand them and act for customers. Filter by business type.",
 };
 
 type Props = { searchParams: Promise<{ type?: string | string[]; place?: string | string[] }> };
@@ -63,11 +64,14 @@ const SELECT = `h-12 w-full cursor-pointer appearance-none rounded-xl border bor
 export default async function LeaderboardPage({ searchParams }: Props) {
   const params = await searchParams;
   const type = one(params.type);
-  const placeParts = parsePlace(one(params.place));
-  const place = placeParts ? one(params.place) : undefined;
+  // Location filter paused for now; only business type is live.
+  // const placeParts = parsePlace(one(params.place));
+  // const place = placeParts ? one(params.place) : undefined;
+  const place = undefined;
   const [filters, rows] = await Promise.all([getFilters(), getLeaderboard({ type, place })]);
   const typeLabel = (slug: string) => filters.types.find((t) => t.slug === slug)?.label ?? slug;
-  const placeName = placeParts ? (filters.places.find((p) => p.key === place)?.label ?? placeLabel(placeParts)) : undefined;
+  // const placeName = placeParts ? (filters.places.find((p) => p.key === place)?.label ?? placeLabel(placeParts)) : undefined;
+  const placeName: string | undefined = undefined;
 
   // Type labels read as adjectives ("Auto Shop websites"), so no plural guessing.
   const scope = [type ? `${typeLabel(type)} websites` : placeName ? "Websites" : "All websites", placeName && `in ${placeName}`]
@@ -86,7 +90,7 @@ export default async function LeaderboardPage({ searchParams }: Props) {
         </div>
 
         {/* Plain GET form so filters work without JavaScript (agents use it too). */}
-        <form action="/leaderboard" method="get" className="grid grid-cols-2 gap-3 sm:flex sm:items-end">
+        <form action="/leaderboard" method="get" className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <label className="flex min-w-0 flex-col gap-1.5 text-sm font-semibold sm:w-[240px]">
             Business type
             <span className="relative">
@@ -101,6 +105,7 @@ export default async function LeaderboardPage({ searchParams }: Props) {
               <Chevron />
             </span>
           </label>
+          {/* Location filter paused for now.
           <label className="flex min-w-0 flex-col gap-1.5 text-sm font-semibold sm:w-[240px]">
             Location
             <span className="relative">
@@ -115,7 +120,8 @@ export default async function LeaderboardPage({ searchParams }: Props) {
               <Chevron />
             </span>
           </label>
-          <button type="submit" className={`col-span-2 h-12 cursor-pointer rounded-xl bg-accent px-6 font-bold text-white hover:brightness-110 ${FOCUS}`}>
+          */}
+          <button type="submit" className={`h-12 cursor-pointer rounded-xl bg-accent px-6 font-bold text-white hover:brightness-110 ${FOCUS}`}>
             Show
           </button>
         </form>
@@ -156,7 +162,7 @@ export default async function LeaderboardPage({ searchParams }: Props) {
                   const meta = [
                     r.name ? { text: r.domain, wide: true } : null,
                     type ? null : { text: typeLabel(r.business_type), wide: false },
-                    placeName || !r.city ? null : { text: placeLabel(r), wide: false },
+                    // Location paused: placeName || !r.city ? null : { text: placeLabel(r), wide: false },
                   ].filter((m) => m !== null);
                   return (
                     <li key={r.domain} value={r.rank}>
