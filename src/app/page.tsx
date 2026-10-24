@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
+import { FIX_LINK_PRICE_LABEL } from "@/lib/pricing";
 import { AuditForm } from "./audit-form";
 import { ScoreRing, SiteFooter, SiteHeader, StatusRow } from "./ui";
 
@@ -38,6 +39,33 @@ const steps = [
 ];
 
 const tools = ["Wix", "Squarespace", "Lovable", "Bolt", "Claude", "Your web developer"];
+
+const plans = [
+  {
+    name: "Your score",
+    price: "Free",
+    per: "",
+    body: "See how AI assistants read your website today.",
+    features: ["Score out of 100", "What's working and what isn't, in plain words", "Your top fixes, most important first", "A spot on the leaderboard", "Re-check any time"],
+    cta: "Get my score",
+    featured: false,
+  },
+  {
+    name: "Fix link",
+    price: FIX_LINK_PRICE_LABEL,
+    per: "one time, per website",
+    body: "Export every fix to your AI website builder in one link.",
+    features: [
+      "Everything in the free score",
+      "Every fix, ranked by impact",
+      "One prompt your builder's AI follows to make the changes",
+      "Ready-made files: llms.txt, structured data, robots.txt",
+      "Send it to your web person in one click",
+    ],
+    cta: "Check my site first",
+    featured: true,
+  },
+];
 
 const asks = [
   "Brunch spot open now with vegan options under $25",
@@ -171,6 +199,51 @@ export default async function Home() {
               Get my score
             </Link>
           </div>
+        </section>
+
+        <section id="pricing" aria-labelledby="pricing-title" className="mx-auto flex max-w-[1200px] flex-col gap-10 px-6 py-24">
+          <div className="flex max-w-[760px] flex-col gap-3">
+            <h2 id="pricing-title" className="font-display text-[36px] leading-[1.05] font-bold tracking-[-0.02em] sm:text-[44px]">
+              Pricing
+            </h2>
+            <p className="text-[19px] text-muted">The score is free. Pay only when you want your AI website builder to make the fixes.</p>
+          </div>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5">
+            {plans.map((p) => (
+              <div
+                key={p.name}
+                className={`flex flex-col gap-5 rounded-[20px] border bg-card p-7 ${p.featured ? "border-accent" : "border-border"}`}
+              >
+                <div className="flex flex-col gap-1.5">
+                  <h3 className="text-[22px] font-semibold">{p.name}</h3>
+                  <p className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-display text-[44px] leading-none font-bold">{p.price}</span>
+                    {p.per && <span className="text-muted">{p.per}</span>}
+                  </p>
+                  <p className="text-muted">{p.body}</p>
+                </div>
+                <ul className="flex flex-1 flex-col gap-2.5">
+                  {p.features.map((f) => (
+                    <li key={f} className="flex gap-2.5">
+                      <span aria-hidden="true" className="font-bold text-accent">
+                        ✓
+                      </span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="#check"
+                  className={`rounded-xl px-6 py-3.5 text-center text-lg font-bold no-underline hover:brightness-110 ${
+                    p.featured ? "bg-accent text-white" : "border border-border-strong text-foreground"
+                  }`}
+                >
+                  {p.cta}
+                </Link>
+              </div>
+            ))}
+          </div>
+          <p className="text-[15px] text-muted">Fix links are free while payments are being set up.</p>
         </section>
       </main>
 

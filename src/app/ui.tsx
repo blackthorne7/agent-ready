@@ -18,6 +18,7 @@ const NAV = [
   { href: "/#score", label: "The score" },
   { href: "/#steps", label: "How to fix" },
   { href: "/leaderboard", label: "Leaderboard", key: "leaderboard" },
+  { href: "/#pricing", label: "Pricing" },
 ] as const;
 
 /** On phones the links drop to their own row under the logo and button; from md up it's one row. */
