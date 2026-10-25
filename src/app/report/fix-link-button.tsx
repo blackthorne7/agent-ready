@@ -49,7 +49,8 @@ async function startCheckout(url: string): Promise<void> {
   const res = await fetch("/api/checkout", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ url }),
+    // The buyer's last paid checkout, so Stripe reuses their customer and their free-next-report code applies.
+    body: JSON.stringify({ url, previous: readBuyer() }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.checkoutUrl) throw new Error(body.error ?? `Request failed (${res.status})`);
@@ -78,6 +79,45 @@ async function paymentStatus(url: string, checkout: string): Promise<"paid" | "n
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
   return body.status;
+}
+
+// The visitor's most recent paid checkout (any site). Kept when a site's unlock is forgotten for a new
+// report, because the next checkout needs it to reuse the buyer's Stripe customer.
+const BUYER_KEY = "agentready:buyer-session";
+
+function readBuyer(): string | undefined {
+  try {
+    return localStorage.getItem(BUYER_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeBuyer(session: string) {
+  try {
+    localStorage.setItem(BUYER_KEY, session);
+  } catch {
+    // Blocked storage: the next checkout makes a new customer, so the reward code won't apply there.
+  }
+}
+
+export interface Reward {
+  code: string;
+  expiresAt: string;
+  active: boolean;
+}
+
+/** The free-next-report code a paid checkout earned, or null if it didn't earn one. */
+async function fetchReward(checkout: string): Promise<Reward | null> {
+  const res = await fetch("/api/checkout/reward", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ checkout }),
+  });
+  if (res.status === 404) return null;
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
+  return body;
 }
 
 // A paid session is remembered per site in this browser, so a reload or a later visit doesn't ask again.
@@ -139,6 +179,7 @@ export function useFixLink(url: string, payment: Payment = { required: false, pr
     if (!payment.required) return;
     if (payment.checkout) {
       writePaid(url, payment.checkout);
+      writeBuyer(payment.checkout);
       const clean = new URL(window.location.href);
       clean.searchParams.delete("checkout");
       window.history.replaceState(null, "", clean);
@@ -238,12 +279,13 @@ export function useFixLink(url: string, payment: Payment = { required: false, pr
   async function restore(email: string) {
     const session = await restorePayment(url, email);
     writePaid(url, session);
+    writeBuyer(session);
     setPaidSession(session);
     setNewReport(false);
     pending.current = null;
   }
 
-  return { state, busy, locked, restore, verify, newReport, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
+  return { state, busy, locked, restore, verify, newReport, paidSession, paid: payment.required && !!paidSession, priceLabel: payment.priceLabel, copyAndOpen, email, stay };
 }
 
 function copyLabel({ state, locked, priceLabel }: FixLink): string {
@@ -307,8 +349,55 @@ function Status({ fix, from }: { fix: FixLink; from: Source }) {
 }
 
 /** Price and demo card while locked; a receipt line once paid. Nothing when there's no paywall. */
-function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
-  if (fix.paid) return <p className={className}>Paid ✓ Your fix link for this report is unlocked.</p>;
+/** After paying: the buyer's single-use code for a free next report (made once per purchase, in Stripe). */
+function RewardCode({ checkout }: { checkout: string }) {
+  const [reward, setReward] = useState<Reward | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    fetchReward(checkout)
+      .then((r) => !cancelled && setReward(r))
+      .catch(() => {
+        // No code to show right now; the purchase itself is unaffected.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [checkout]);
+  if (!reward) return null;
+  const until = new Date(reward.expiresAt).toLocaleDateString("en-US", { dateStyle: "medium" });
+  if (!reward.active) return <p className="text-[15px] text-[#eaf1ff]">Your free-report code {reward.code} has been used.</p>;
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-white px-5 py-4 text-[#0b1220]">
+      <div className="flex min-w-0 flex-[1_1_260px] flex-col">
+        <strong>Your next report is free</strong>
+        <span className="text-[#334155]">
+          After you make the fixes and check again, enter this code at checkout. Single use, only for you, until {until}.
+        </span>
+      </div>
+      <span className="font-mono text-xl font-bold tracking-wider">{reward.code}</span>
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard?.writeText(reward.code).then(() => setCopied(true));
+        }}
+        className="rounded-xl border-2 border-[#0b1220] px-4 py-2 font-bold hover:bg-[#eaf1ff]"
+      >
+        {copied ? "Copied ✓" : "Copy code"}
+      </button>
+    </div>
+  );
+}
+
+function PaymentNote({ fix, className, showReward = false }: { fix: FixLink; className: string; showReward?: boolean }) {
+  if (fix.paid) {
+    return (
+      <>
+        <p className={className}>Paid ✓ Your fix link for this report is unlocked.</p>
+        {showReward && fix.paidSession && <RewardCode checkout={fix.paidSession} />}
+      </>
+    );
+  }
   if (!fix.locked) return null;
   return (
     <p className={className}>
@@ -410,7 +499,7 @@ export function FixLinkBanner({ fix, count }: { fix: FixLink; count: number }) {
           </button>
         </div>
       </div>
-      <PaymentNote fix={fix} className="text-[15px] text-[#eaf1ff]" />
+      <PaymentNote fix={fix} className="text-[15px] text-[#eaf1ff]" showReward />
       <RestorePayment fix={fix} />
       <Status fix={fix} from="banner" />
     </section>

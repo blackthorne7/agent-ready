@@ -3,6 +3,7 @@
 // Env: STRIPE_SECRET_KEY (sk_test_...). Unset = no paywall, fix links stay free.
 //      SITE_URL: where Stripe sends the payer back. Defaults to the live site (DEFAULT_SITE_URL); localhost uses itself.
 
+import { createHash } from "node:crypto";
 import { FIX_LINK_PRICE_CENTS } from "./pricing";
 
 export { FIX_LINK_PRICE_CENTS, FIX_LINK_PRICE_LABEL } from "./pricing";
@@ -34,6 +35,8 @@ export class PaymentError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** Stripe's error code, e.g. "resource_already_exists". */
+    readonly stripeCode?: string,
   ) {
     super(message);
   }
@@ -51,7 +54,7 @@ async function stripe<T>(path: string, init: { method: "GET" | "POST"; form?: Re
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     // Stripe's message, not the key or request.
-    throw new PaymentError(body?.error?.message ?? `Stripe request failed (${res.status})`, res.status >= 500 ? 502 : 400);
+    throw new PaymentError(body?.error?.message ?? `Stripe request failed (${res.status})`, res.status >= 500 ? 502 : 400, body?.error?.code);
   }
   return body as T;
 }
@@ -62,6 +65,10 @@ interface CheckoutSession {
   status?: "open" | "complete" | "expired";
   payment_status: "paid" | "unpaid" | "no_payment_required";
   metadata: Record<string, string> | null;
+  /** The Stripe customer the checkout belongs to (checkouts create or reuse one). */
+  customer?: string | null;
+  /** What was charged, in cents, after discounts. 0 when a 100%-off code was used. */
+  amount_total?: number | null;
 }
 
 /**
@@ -69,7 +76,7 @@ interface CheckoutSession {
  * (src/lib/report-fingerprint.ts), so the payment covers that report and re-checks that come out the same.
  * Returns to the report with ?checkout=<session id>.
  */
-export async function createCheckout(siteUrl: string, origin: string, report: string): Promise<string> {
+export async function createCheckout(siteUrl: string, origin: string, report: string, customer?: string | null): Promise<string> {
   const domain = siteDomain(siteUrl);
   const back = `${origin}/report?url=${encodeURIComponent(siteUrl)}`;
   const session = await stripe<CheckoutSession>("/checkout/sessions", {
@@ -83,6 +90,8 @@ export async function createCheckout(siteUrl: string, origin: string, report: st
       "line_items[0][price_data][product_data][description]": "Every fix from this report in one link, ready to paste into your AI website builder.",
       "metadata[domain]": domain,
       "metadata[report]": report,
+      // A returning buyer keeps their Stripe customer, so their free-next-report code (buyer only) applies.
+      ...(customer ? { customer } : { customer_creation: "always" }),
       // Promotion codes (created in the Stripe dashboard) can be entered on the checkout page.
       allow_promotion_codes: "true",
       // Stripe fills in {CHECKOUT_SESSION_ID}; it must stay unencoded.
@@ -153,6 +162,97 @@ export async function findPaidSession(email: string, siteUrl: string, report: st
 
 /** The live site's permanent address (README "Deploy": the URL never changes). */
 export const DEFAULT_SITE_URL = "https://snowy-thunder-epw3bj03.sfo.unikraft.app";
+
+/** A settled checkout's Stripe customer, so the buyer's next checkout reuses it. Null for anything else. */
+export async function customerOf(sessionId: string | undefined): Promise<string | null> {
+  if (!sessionId || !/^cs_test_[A-Za-z0-9]+$/.test(sessionId)) return null;
+  try {
+    const session = await stripe<CheckoutSession>(`/checkout/sessions/${sessionId}`, { method: "GET" });
+    return settled(session) ? (session.customer ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface Reward {
+  code: string;
+  /** ISO date the code stops working. */
+  expiresAt: string;
+  /** False once it's been used (or expired). */
+  active: boolean;
+}
+
+const REWARD_DAYS = 30;
+
+interface PromotionCode {
+  code: string;
+  active: boolean;
+  expires_at: number | null;
+}
+
+const toReward = (p: PromotionCode): Reward => ({ code: p.code, active: p.active, expiresAt: new Date((p.expires_at ?? 0) * 1000).toISOString() });
+
+async function findPromotionCode(code: string): Promise<PromotionCode | null> {
+  const { data } = await stripe<{ data: PromotionCode[] }>(`/promotion_codes?${new URLSearchParams({ code, limit: "1" })}`, { method: "GET" });
+  return data[0] ?? null;
+}
+
+/**
+ * The thank-you code for a purchase: 100% off the buyer's next report, single use, only for the buyer's
+ * Stripe customer, valid 30 days. Created the first time it's asked for and the same code after that
+ * (its id and code come from the session id). Null unless the checkout actually charged money, so a
+ * free report paid with one of these codes doesn't earn another.
+ */
+export async function rewardFor(sessionId: string): Promise<Reward | null> {
+  if (!/^cs_test_[A-Za-z0-9]+$/.test(sessionId)) return null;
+  const tag = createHash("sha256").update(sessionId).digest("hex").slice(0, 10);
+  const code = `FREE${tag.slice(0, 8).toUpperCase()}`;
+  // Already made: return it, with Stripe's current used/expired state.
+  const existing = await findPromotionCode(code);
+  if (existing) return toReward(existing);
+
+  const session = await stripe<CheckoutSession>(`/checkout/sessions/${sessionId}`, { method: "GET" });
+  if (session.payment_status !== "paid" || !session.amount_total || !session.customer) return null;
+
+  const expires = Math.floor(Date.now() / 1000) + REWARD_DAYS * 24 * 60 * 60;
+  const couponId = `free-next-report-${tag}`;
+  try {
+    await stripe("/coupons", {
+      method: "POST",
+      form: {
+        id: couponId,
+        name: "Free next report",
+        percent_off: "100",
+        duration: "once",
+        max_redemptions: "1",
+        redeem_by: String(expires),
+        "metadata[session]": session.id,
+      },
+    });
+  } catch (err) {
+    if (!(err instanceof PaymentError && err.stripeCode === "resource_already_exists")) throw err;
+  }
+  try {
+    const promo = await stripe<PromotionCode>("/promotion_codes", {
+      method: "POST",
+      form: {
+        "promotion[type]": "coupon",
+        "promotion[coupon]": couponId,
+        code,
+        customer: session.customer,
+        max_redemptions: "1",
+        expires_at: String(expires),
+        "metadata[session]": session.id,
+      },
+    });
+    return toReward(promo);
+  } catch (err) {
+    // Created by a concurrent request in the meantime.
+    const raced = await findPromotionCode(code);
+    if (raced) return toReward(raced);
+    throw err;
+  }
+}
 
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
