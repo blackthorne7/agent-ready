@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { DEFAULT_SITE_URL, checkPayment, createCheckout, findPaidSession, paywallEnabled, siteDomain, siteOrigin } from "./payments";
+import { DEFAULT_SITE_URL, checkPayment, createCheckout, customerOf, findPaidSession, paywallEnabled, rewardFor, siteDomain, siteOrigin } from "./payments";
 
 type Call = { url: string; method: string; form: URLSearchParams | null; auth: string | null };
 
@@ -145,6 +145,75 @@ describe("findPaidSession (Already paid? Restore)", () => {
     assert.equal(await findPaidSession("owner@example.com", "https://example.com/", "fp-NEW"), null);
     fakeStripe(() => ({ body: { data: [] } }));
     assert.equal(await findPaidSession("someone@else.com", "https://example.com/", "fp-A"), null);
+  });
+});
+
+describe("returning buyer's customer", () => {
+  it("a first checkout creates a customer; a returning buyer's reuses theirs", async () => {
+    fakeStripe(() => ({ body: { id: "cs_test_n", url: "https://checkout.stripe.com/x" } }));
+    await createCheckout("https://example.com/", "https://agentready.test", "fp");
+    assert.equal(calls[0].form!.get("customer_creation"), "always");
+    assert.equal(calls[0].form!.get("customer"), null);
+    await createCheckout("https://example.com/", "https://agentready.test", "fp", "cus_123");
+    assert.equal(calls[1].form!.get("customer"), "cus_123");
+    assert.equal(calls[1].form!.get("customer_creation"), null);
+  });
+
+  it("takes the customer only from a settled checkout in Stripe", async () => {
+    fakeStripe(() => ({ body: { id: "cs_test_c", payment_status: "paid", customer: "cus_123", metadata: {} } }));
+    assert.equal(await customerOf("cs_test_c"), "cus_123");
+    fakeStripe(() => ({ body: { id: "cs_test_u", payment_status: "unpaid", customer: "cus_999", metadata: {} } }));
+    assert.equal(await customerOf("cs_test_u"), null);
+    assert.equal(await customerOf("cus_123"), null, "a raw customer id from the client is never accepted");
+    assert.equal(await customerOf(undefined), null);
+  });
+});
+
+describe("rewardFor (free next report)", () => {
+  const paid = { id: "cs_test_buy1", payment_status: "paid", status: "complete", amount_total: 900, customer: "cus_buyer", metadata: {} };
+
+  it("creates a single-use, buyer-only, 30-day 100%-off code for a paid purchase", async () => {
+    fakeStripe((c) => {
+      if (c.url.includes("/promotion_codes?")) return { body: { data: [] } };
+      if (c.url.includes("/checkout/sessions/")) return { body: paid };
+      if (c.url.endsWith("/coupons")) return { body: { id: c.form!.get("id") } };
+      return { body: { code: c.form!.get("code"), active: true, expires_at: Number(c.form!.get("expires_at")) } };
+    });
+    const before = Date.now();
+    const reward = await rewardFor("cs_test_buy1");
+    assert.ok(reward && /^FREE[0-9A-F]{8}$/.test(reward.code) && reward.active);
+
+    const coupon = calls.find((c) => c.url.endsWith("/coupons"))!.form!;
+    assert.equal(coupon.get("percent_off"), "100");
+    assert.equal(coupon.get("duration"), "once");
+    assert.equal(coupon.get("max_redemptions"), "1");
+    const promo = calls.find((c) => c.url.endsWith("/promotion_codes") && c.method === "POST")!.form!;
+    assert.equal(promo.get("promotion[type]"), "coupon");
+    assert.equal(promo.get("promotion[coupon]"), coupon.get("id"));
+    assert.equal(promo.get("customer"), "cus_buyer");
+    assert.equal(promo.get("max_redemptions"), "1");
+    const days = (Number(promo.get("expires_at")) * 1000 - before) / 86_400_000;
+    assert.ok(days > 29.9 && days <= 30, `expires in ${days} days`);
+  });
+
+  it("returns the same code again instead of making a second one", async () => {
+    fakeStripe(() => ({ body: { data: [{ code: "FREEABCD1234", active: false, expires_at: 2_000_000_000 }] } }));
+    const reward = await rewardFor("cs_test_buy1");
+    assert.equal(reward?.code, "FREEABCD1234");
+    assert.equal(reward?.active, false, "a used code shows as used");
+    assert.ok(calls.every((c) => c.method === "GET"), "nothing created");
+  });
+
+  it("gives no code for a checkout completed at $0 (paid with a free code), unpaid, or without a customer", async () => {
+    for (const session of [
+      { ...paid, payment_status: "no_payment_required", amount_total: 0 },
+      { ...paid, payment_status: "unpaid" },
+      { ...paid, customer: null },
+    ]) {
+      fakeStripe((c) => (c.url.includes("/promotion_codes?") ? { body: { data: [] } } : { body: session }));
+      assert.equal(await rewardFor("cs_test_buy1"), null);
+      assert.ok(calls.every((c) => c.method === "GET"), "nothing created");
+    }
   });
 });
 
