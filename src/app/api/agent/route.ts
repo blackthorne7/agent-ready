@@ -16,11 +16,12 @@ const Body = z.object({ url: z.string().trim().min(1), fresh: z.boolean().option
 
 const HOUR = 60 * 60 * 1000;
 // Each new run costs three Omnara agent runs and a Context.dev lookup. Repeat visits within the
-// hour reuse the result for free; only new runs count against the limits.
+// hour reuse the result for free; only new runs count against the limits. The per-visitor limit
+// is per IP, which a whole venue's Wi-Fi can share, so it's generous; `overall` caps the spend.
 const results = new TtlCache<{ url: string; tasks: AgentTaskRun[]; report: Report }>(HOUR, 500);
 // Kept apart from `results`, so a site that unblocks us isn't served its old blocked result.
 const blockedResults = new TtlCache<Report>(HOUR, 500);
-const perVisitor = new RateLimiter(6, HOUR);
+const perVisitor = new RateLimiter(30, HOUR);
 const overall = new RateLimiter(120, HOUR);
 
 /**
