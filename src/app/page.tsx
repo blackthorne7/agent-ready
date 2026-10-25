@@ -246,11 +246,7 @@ export default async function Home() {
               </div>
             ))}
           </div>
-          <p className="text-[15px] text-muted">
-            {paywall
-              ? "Demo: checkout runs in Stripe test mode, so no real money is charged. Pay with card 4242 4242 4242 4242, any future date and any CVC."
-              : "Fix links are free while payments are being set up."}
-          </p>
+          {!paywall && <p className="text-[15px] text-muted">Fix links are free while payments are being set up.</p>}
         </section>
       </main>
 
