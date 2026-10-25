@@ -314,8 +314,7 @@ function PaymentNote({ fix, className }: { fix: FixLink; className: string }) {
     <p className={className}>
       {fix.newReport && <strong>Your site changed since you paid, so this is a new report. </strong>}
       {fix.priceLabel} for this report&apos;s fix link, whether you copy it or send it to your web person; the report itself stays free. Re-checking without changes stays unlocked; a new report after
-      changes is {fix.priceLabel} again. Demo checkout (Stripe test mode): pay with card <span className="font-mono">4242 4242 4242 4242</span>, any
-      future date and any CVC. No real money is charged.
+      changes is {fix.priceLabel} again.
     </p>
   );
 }
