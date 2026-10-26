@@ -2,7 +2,7 @@
 
 Lighthouse for AI agents. Audits any website for whether agents like Claude can **get in**, **understand it** (hours, location, menus, products, contact) and **take action** (MCP/A2A/OpenAPI endpoints, declared order/reserve actions, labeled forms), then returns a 0-100 score with copy-paste fixes.
 
-Live: https://snowy-thunder-epw3bj03.sfo.unikraft.app
+Live: https://agentready.sfo.unikraft.app
 
 Problem and solution: [docs/problem-solution.md](docs/problem-solution.md)
 
@@ -22,7 +22,7 @@ Three directions to choose from, side by side on one canvas: https://claude.ai/a
 - **MCP server:** `/api/mcp` (streamable HTTP), tools `audit_site` and `generate_fixes`
 
 ```bash
-claude mcp add --transport http agent-ready https://snowy-thunder-epw3bj03.sfo.unikraft.app/api/mcp
+claude mcp add --transport http agent-ready https://agentready.sfo.unikraft.app/api/mcp
 ```
 
 ## Develop
@@ -106,17 +106,17 @@ Env vars are listed in `.env.example`. Supabase tables: `supabase/schema.sql` (a
 
 ## Deploy (Unikraft Cloud)
 
-**Merging to `main` deploys automatically** (`.github/workflows/deploy.yml`): it runs the unit tests, builds the image, swaps it onto the live `agent-ready` instance and checks the site. Only the image changes; the instance's env vars are kept. It needs the `UNIKRAFT_TOKEN` repository secret, and can be re-run from the Actions tab ("Run workflow"). Pull requests get tests and a production build first (`ci.yml`).
+**Merging to `main` deploys automatically** (`.github/workflows/deploy.yml`): it runs the unit tests, builds the image, swaps it onto the live `agent-ready` instance and checks the site. Only the image changes; the instance's env vars are kept. It needs the `UNIKRAFT_TOKEN` repository secret and the `UNIKRAFT_ORG`, `UNIKRAFT_INSTANCE` (`agent-ready`) and `UNIKRAFT_SERVICE` (`agentready`, which sets the URL) repository variables. If the instance doesn't exist yet, the first run creates the service and the instance, taking its env vars from the repository secrets of the same names as in `.env`. It can be re-run from the Actions tab ("Run workflow"). Pull requests get tests and a production build first (`ci.yml`).
 
 To add or change an env var, stop the instance, edit, start (see below). The manual steps are for first-time setup or when Actions is down. Requires Docker and `unikraft login`.
 
-Deploys attach to the existing `snowy-thunder-epw3bj03` service so the URL never changes. Supabase env is read from `.env` (it isn't baked into the image).
+Deploys attach to the existing `agentready` service so the URL never changes. Supabase env is read from `.env` (it isn't baked into the image).
 
 ```bash
 unikraft build . --output agent-ready/agent-ready:latest
 unikraft instances delete agent-ready
 set -a && . ./.env && set +a
-unikraft run --metro sfo --name agent-ready -m 1024M --set service=snowy-thunder-epw3bj03 \
+unikraft run --metro sfo --name agent-ready -m 1024M --set service=agentready \
   -e HOSTNAME=0.0.0.0 -e PORT=3000 -e NODE_ENV=production \
   -e SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
   -e NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
@@ -130,7 +130,7 @@ unikraft run --metro sfo --name agent-ready -m 1024M --set service=snowy-thunder
   -e CONTEXT_DEV_API_KEY="$CONTEXT_DEV_API_KEY" \
   -e LOGOLINK_CLIENT_ID="$LOGOLINK_CLIENT_ID" \
   -e STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
-  -e SITE_URL=https://snowy-thunder-epw3bj03.sfo.unikraft.app \
+  -e SITE_URL=https://agentready.sfo.unikraft.app \
   --image agent-ready/agent-ready:latest
 ```
 
@@ -139,10 +139,10 @@ To add the paywall to the instance that's already running, without dropping its 
 ```bash
 unikraft instances stop agent-ready
 unikraft instances edit agent-ready --add runtime.env=STRIPE_SECRET_KEY=sk_test_...
-unikraft instances edit agent-ready --add runtime.env=SITE_URL=https://snowy-thunder-epw3bj03.sfo.unikraft.app
+unikraft instances edit agent-ready --add runtime.env=SITE_URL=https://agentready.sfo.unikraft.app
 unikraft instances start agent-ready
 ```
 
 `.env` must have the Supabase, `OMNARA_*` and Context.dev (`CONTEXT_DEV_API_KEY`, `LOGOLINK_CLIENT_ID`) vars; see `.env.example`. Nothing errors if one is missing: without the Omnara vars the agent section fails, and without the Context.dev ones logos disappear and categories and fix plans fall back to keywords and TODOs. Instance env vars can't be added later with `-e` (that replaces the whole env); use `unikraft instances edit agent-ready --add runtime.env=KEY=value` instead. Edits to env or image only take effect while the instance is stopped: `unikraft instances stop agent-ready`, edit, then `unikraft instances start agent-ready`.
 
-If `instances delete agent-ready` reports "not found", run `unikraft instances list` and delete whatever is on `snowy-thunder` by its UUID.
+If `instances delete agent-ready` reports "not found", run `unikraft instances list` and delete whatever is on `agentready` by its UUID.

@@ -161,7 +161,7 @@ export async function findPaidSession(email: string, siteUrl: string, report: st
 }
 
 /** The live site's permanent address (README "Deploy": the URL never changes). */
-export const DEFAULT_SITE_URL = "https://snowy-thunder-epw3bj03.sfo.unikraft.app";
+export const DEFAULT_SITE_URL = "https://agentready.sfo.unikraft.app";
 
 /** A settled checkout's Stripe customer, so the buyer's next checkout reuses it. Null for anything else. */
 export async function customerOf(sessionId: string | undefined): Promise<string | null> {
