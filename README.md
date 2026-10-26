@@ -69,7 +69,3 @@ unikraft instances stop agent-ready
 unikraft instances edit agent-ready --add runtime.env=KEY=value
 unikraft instances start agent-ready
 ```
-
-## Credits
-
-Built at a hackathon in October 2026 by Shane Blackthorne, Leandro Vallejos, Timothy Altman and Yonas Tsegai, with Claude Code.
