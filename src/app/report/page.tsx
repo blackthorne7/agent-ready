@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { runAudit } from "@/lib/audit";
 import { logoUrl } from "@/lib/context-dev";
+import { AUDIT_LIMIT_MESSAGE, takeAudit } from "@/lib/limits";
 import { FIX_LINK_PRICE_LABEL, paywallEnabled } from "@/lib/payments";
 import { AuditForm } from "../audit-form";
 import { BlockedReport } from "./blocked-report";
@@ -32,7 +34,8 @@ export default async function ReportPage({ searchParams }: Props) {
     );
   }
   // Checklist only, and not saved: ReportBody waits for the agent's final score, which /api/agent saves.
-  const report = url ? await runAudit(url) : null;
+  const limited = url ? !takeAudit(await headers()) : false;
+  const report = url && !limited ? await runAudit(url) : null;
 
   return (
     <div className="text-[17px] leading-[1.55]">
@@ -43,6 +46,13 @@ export default async function ReportPage({ searchParams }: Props) {
         {(!report || (report.score == null && !report.access)) && (
           <div id="check">
             <AuditForm defaultValue={url ?? ""} />
+          </div>
+        )}
+
+        {limited && (
+          <div role="alert" className="rounded-2xl bg-bad-bg p-6">
+            <h1 className="font-display text-2xl font-bold">Couldn&apos;t check {url} right now</h1>
+            <p className="mt-1 text-muted">{AUDIT_LIMIT_MESSAGE}</p>
           </div>
         )}
 

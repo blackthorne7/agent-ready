@@ -21,7 +21,7 @@ The rubric has an area ("Can AI finish tasks for customers?") that only the AI a
 | --- | --- |
 | `src/app/report/page.tsx` | Runs the checklist for errors/blocked sites and as a fallback. Doesn't save. |
 | `src/app/report/report-body.tsx` | Holds everything behind the progress card until the final report arrives. `AGENT_STAGES` sets the card's stages. |
-| `src/app/api/agent/route.ts` | Runs the agent, re-scores, saves. If the agent throws, it still scores and saves once, without task results. With `blocked: true` it records a bot-walled site instead (see below). |
+| `src/app/api/agent/route.ts` | Runs the agent, re-scores, saves. If the agent throws, or the day's agent budget (`AGENT_DAILY_BUDGET`, default 50) is used up, it still scores and saves once, without task results; a used-up budget is flagged `agentSkipped: "daily_limit"` and the verdict card says so. With `blocked: true` it records a bot-walled site instead (see below). |
 | `src/app/report/blocked-report.tsx` | The report for a site that blocked our checker: no score, how to unblock, and how owners let our checker in. |
 | `src/app/report/AgentEvaluationProgress.tsx` | The loading card (`mode="demo"` in `loading.tsx`, `mode="live"` in `report-body.tsx`). |
 

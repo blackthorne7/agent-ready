@@ -4,7 +4,7 @@ import { applyBrand } from "@/lib/audit/business";
 import { assertPublicUrl } from "@/lib/audit/fetch";
 import { saveAudit } from "@/lib/audit/save";
 import { getBrand } from "@/lib/context-dev";
-import { RateLimiter, TtlCache, clientIp } from "@/lib/limits";
+import { DAY, HOUR, RateLimiter, TtlCache, clientIp } from "@/lib/limits";
 import { runAgentTasks, toTaskRun, type AgentTaskRun } from "../../../../lib/agent/tasks";
 
 export const dynamic = "force-dynamic";
@@ -14,15 +14,18 @@ export const runtime = "nodejs";
 // blocked: the report page hit a bot wall, so record that for the leaderboard instead of running the agent.
 const Body = z.object({ url: z.string().trim().min(1), fresh: z.boolean().optional(), blocked: z.boolean().optional() });
 
-const HOUR = 60 * 60 * 1000;
 // Each new run costs three Omnara agent runs and a Context.dev lookup. Repeat visits within the
-// hour reuse the result for free; only new runs count against the limits. The per-visitor limit
-// is per IP, which a whole venue's Wi-Fi can share, so it's generous; `overall` caps the spend.
-const results = new TtlCache<{ url: string; tasks: AgentTaskRun[]; report: Report }>(HOUR, 500);
+// hour reuse the result for free; only new runs count against the limits. `perVisitor` and
+// `overall` cap new site checks; `agentBudget` caps agent runs a day (AGENT_DAILY_BUDGET, default 50). Past the budget, new sites
+// are still scored and saved from the checklist, the same as when the agent fails.
+// agentSkipped: the agent wasn't run because the day's budget was used up.
+type AgentResult = { url: string; tasks: AgentTaskRun[]; report: Report; agentSkipped?: "daily_limit" };
+const results = new TtlCache<AgentResult>(HOUR, 500);
 // Kept apart from `results`, so a site that unblocks us isn't served its old blocked result.
 const blockedResults = new TtlCache<Report>(HOUR, 500);
-const perVisitor = new RateLimiter(30, HOUR);
-const overall = new RateLimiter(120, HOUR);
+const perVisitor = new RateLimiter(10, HOUR);
+const overall = new RateLimiter(60, HOUR);
+const agentBudget = new RateLimiter(Number(process.env.AGENT_DAILY_BUDGET) || 50, DAY);
 
 /**
  * Runs the agent tasks (lib/agent/tasks.ts) against a site, then re-scores the site with their
@@ -59,19 +62,23 @@ export async function POST(req: Request) {
     return Response.json({ report: value, cached });
   }
 
-  const { value, cached } = await results.get(url, async () => {
+  const { value, cached } = await results.get(url, async (): Promise<AgentResult> => {
     // The brand lookup (industry, location) runs alongside the agent, so it adds no wait.
     const brand = getBrand(new URL(url).hostname.replace(/^www\./, ""));
+    const withAgent = agentBudget.take("all");
+    if (!withAgent) console.warn("[agent] daily budget used up; scoring from the checklist only:", url);
     // If the agent itself fails, still score and save once without it, so every site gets one final score.
-    const tasks = await runAgentTasks(url).catch((err) => {
-      console.error("[agent]", err);
-      return [];
-    });
+    const tasks = withAgent
+      ? await runAgentTasks(url).catch((err) => {
+          console.error("[agent]", err);
+          return [];
+        })
+      : [];
     const report = await runAudit(url, { tasks: tasks.map(toTaskRun) });
     report.business = applyBrand(report.business, await brand);
     // The only place a report-page audit is saved: once per run, so each check gets one final score.
     await saveAudit(report);
-    return { url, tasks, report };
+    return withAgent ? { url, tasks, report } : { url, tasks, report, agentSkipped: "daily_limit" };
   }, { refresh: fresh });
   return Response.json({ ...value, cached });
 }

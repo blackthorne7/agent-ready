@@ -1,4 +1,4 @@
-// In-memory caching and rate limits for the expensive endpoints (/api/agent, /api/fix-link).
+// In-memory caching and rate limits for the endpoints that spend money or save (/api/agent, /api/fix-link, audits).
 // In memory is enough here: the site runs as a single instance, and a restart only costs a fresh run.
 
 /** A time-limited cache that also shares in-flight work: concurrent callers for one key get one run. */
@@ -80,8 +80,36 @@ export class RateLimiter {
   }
 }
 
-/** The visitor's IP from the proxy headers, or null when there's none to go on. */
-export function clientIp(req: Request): string | null {
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || req.headers.get("x-real-ip") || req.headers.get("cf-connecting-ip") || null;
+/**
+ * The visitor's IP from the proxy headers, or null when there's none to go on. Unikraft's proxy
+ * replaces X-Forwarded-For with the real client address, so a client can't pick its own.
+ */
+export function clientIp(from: Request | Headers): string | null {
+  const headers = from instanceof Headers ? from : from.headers;
+  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || headers.get("x-real-ip") || headers.get("cf-connecting-ip") || null;
 }
+
+export const HOUR = 60 * 60 * 1000;
+export const DAY = 24 * HOUR;
+
+/** One limiter per name for the whole server. Route bundles each get their own copy of this module, so a plain module-level instance wouldn't be shared. */
+function shared(name: string, limit: number, windowMs: number): RateLimiter {
+  const store = ((globalThis as { __rateLimiters?: Map<string, RateLimiter> }).__rateLimiters ??= new Map());
+  if (!store.has(name)) store.set(name, new RateLimiter(limit, windowMs));
+  return store.get(name)!;
+}
+
+/**
+ * Checklist audits (report page, /api/audit, the MCP tools). They don't call the agent, but they
+ * fetch the site and save to the leaderboard, so a script shouldn't be able to run them in bulk.
+ */
+export const auditsPerVisitor = shared("audits", 60, HOUR);
+
+/** Takes one checklist audit for the visitor; false if they're over the limit. No IP means no limit. */
+export function takeAudit(from: Request | Headers): boolean {
+  const ip = clientIp(from);
+  return !ip || auditsPerVisitor.take(ip);
+}
+
+export const AUDIT_LIMIT_MESSAGE = "Too many checks from your network in the last hour. Try again later.";

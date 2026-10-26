@@ -12,7 +12,11 @@ export const AGENT_STATUS: Record<AgentTaskRun["result"]["status"], { tone: Tone
   error: { tone: "warn", label: "Didn't finish" },
 };
 
-export type AgentState = { kind: "loading" } | { kind: "error"; message: string } | { kind: "done"; tasks: AgentTaskRun[] };
+// skipped: the server didn't run the agent because its daily budget was used up.
+export type AgentState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "done"; tasks: AgentTaskRun[]; skipped?: "daily_limit" };
 
 /**
  * Sends an AI agent to try a few real tasks on the site, after the static report has rendered.
@@ -46,7 +50,7 @@ export function useAgentRun(url: string, onReport: (report: Report) => void): Ag
         // No final score (e.g. the re-check hit a bot wall): nothing was saved, so treat it as a failed run.
         if (body.report?.score == null) throw new Error(body.report?.error ?? "The check didn't produce a final score");
         if (cancelled) return;
-        setState({ kind: "done", tasks: body.tasks });
+        setState({ kind: "done", tasks: body.tasks, skipped: body.agentSkipped });
         onReport(body.report);
       })
       .catch((err: unknown) => {
@@ -63,6 +67,13 @@ export function useAgentRun(url: string, onReport: (report: Report) => void): Ag
 /** Under the verdict: what the agent tried and whether it worked. */
 export function AgentStrip({ state }: { state: AgentState }) {
   if (state.kind === "loading") return null;
+  if (state.kind === "done" && state.skipped === "daily_limit") {
+    return (
+      <p className="text-[15px] text-muted">
+        Our AI agent has reached its daily limit, so this score is from our checklist only. Check again tomorrow for the full test.
+      </p>
+    );
+  }
   // runAgent reports its own failures (no API key, model timeout) as "error" runs, which the score ignores.
   if (state.kind === "error" || state.tasks.every((t) => t.result.status === "error")) {
     return <p className="text-[15px] text-muted">AI task test didn&apos;t run this time, so this score is from our checklist only.</p>;

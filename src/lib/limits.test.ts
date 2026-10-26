@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { RateLimiter, TtlCache, clientIp } from "./limits";
+import { RateLimiter, TtlCache, clientIp, takeAudit } from "./limits";
 
 function clock(start = 0) {
   let t = start;
@@ -87,5 +87,19 @@ describe("clientIp", () => {
   it("falls back to X-Real-IP, or null", () => {
     assert.equal(clientIp(req({ "x-real-ip": "198.51.100.2" })), "198.51.100.2");
     assert.equal(clientIp(req({})), null);
+  });
+  it("reads plain Headers too (server components get those, not a Request)", () => {
+    assert.equal(clientIp(new Headers({ "x-forwarded-for": "203.0.113.8" })), "203.0.113.8");
+  });
+});
+
+describe("takeAudit", () => {
+  it("allows 60 audits an hour per visitor, and doesn't limit requests with no IP", () => {
+    const visitor = new Headers({ "x-forwarded-for": "192.0.2.60" });
+    const results = Array.from({ length: 61 }, () => takeAudit(visitor));
+    assert.equal(results.filter(Boolean).length, 60);
+    assert.equal(results[60], false);
+    assert.equal(takeAudit(new Headers({ "x-forwarded-for": "192.0.2.61" })), true);
+    assert.equal(takeAudit(new Headers()), true);
   });
 });

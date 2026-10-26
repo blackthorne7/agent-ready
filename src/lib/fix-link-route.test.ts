@@ -90,3 +90,41 @@ describe("/api/checkout/restore", () => {
     assert.deepEqual(statuses.slice(10), [429, 429]);
   });
 });
+
+describe("checklist audit limits", () => {
+  const ip = "192.0.2.77";
+  const useUpAudits = async () => {
+    const { auditsPerVisitor } = await import("./limits");
+    while (auditsPerVisitor.take(ip));
+  };
+
+  it("/api/audit refuses a visitor over the limit before fetching the site", async () => {
+    await useUpAudits();
+    let fetches = 0;
+    globalThis.fetch = (async () => {
+      fetches++;
+      return new Response("<html></html>");
+    }) as typeof fetch;
+    const { GET } = await import("../app/api/audit/route");
+    const res = await GET(new Request("http://localhost/api/audit?url=example.com", { headers: { "x-forwarded-for": ip } }));
+    assert.equal(res.status, 429);
+    assert.equal(fetches, 0);
+  });
+
+  it("/api/mcp counts tool calls, not protocol messages", async () => {
+    await useUpAudits();
+    const { POST: mcpPOST } = await import("../app/api/mcp/route");
+    const mcp = (method: string) =>
+      mcpPOST(
+        new Request("http://localhost/api/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "x-forwarded-for": ip },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: method === "tools/call" ? { name: "audit_site", arguments: { url: "example.com" } } : {} }),
+        }),
+      );
+    const call = await mcp("tools/call");
+    assert.equal(call.status, 429);
+    assert.equal((await call.json()).error.code, -32000);
+    assert.notEqual((await mcp("tools/list")).status, 429);
+  });
+});
