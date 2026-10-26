@@ -1,7 +1,7 @@
-# Deploys main to the live Unikraft instance on every merge. Only the image changes: the instance's
-# env (Supabase, Omnara, Context.dev, Stripe keys) is kept as is. Needs the UNIKRAFT_TOKEN repo secret
-# and the UNIKRAFT_ORG, UNIKRAFT_INSTANCE and UNIKRAFT_SERVICE repo variables. The first run creates the
-# service (https://<UNIKRAFT_SERVICE>.sfo.unikraft.app) and the instance, with its env from the repo secrets.
+# Deploys main to the live Unikraft instance on every merge: a new image, and env vars from the repo
+# secrets (Supabase, Omnara, Context.dev, Stripe). Needs the UNIKRAFT_TOKEN repo secret and the
+# UNIKRAFT_ORG, UNIKRAFT_INSTANCE and UNIKRAFT_SERVICE repo variables (AGENT_DAILY_BUDGET is optional).
+# The first run creates the service (https://<UNIKRAFT_SERVICE>.sfo.unikraft.app) and the instance.
 name: Deploy
 
 on:
@@ -79,9 +79,10 @@ jobs:
           echo "DIGEST=$DIGEST" >> "$GITHUB_ENV"
           echo "Built $TAG ($DIGEST)"
 
-      # First deploy only. Later deploys keep the instance's env; change it with `instances edit` (README).
-      - name: Create the service and instance
-        id: create
+      # The instance's env is set from the repo secrets on every deploy, so rotating a key means
+      # updating the secret and re-running this workflow. The first run creates the service and instance.
+      # Image and env edits only apply to a stopped instance; if the edit fails, it starts again as it was.
+      - name: Deploy the instance
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -94,28 +95,28 @@ jobs:
           CONTEXT_DEV_API_KEY: ${{ secrets.CONTEXT_DEV_API_KEY }}
           LOGOLINK_CLIENT_ID: ${{ secrets.LOGOLINK_CLIENT_ID }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          AGENT_DAILY_BUDGET: ${{ vars.AGENT_DAILY_BUDGET }}
         run: |
-          if unikraft instances get "$INSTANCE" -o yaml | grep -E '^\s*(image|state):'; then exit 0; fi
-          unikraft services get "$SERVICE" >/dev/null 2>&1 \
-            || unikraft services create --metro sfo --name "$SERVICE" --domain "$SERVICE" --service 443:3000/tls+http
           args=(-e HOSTNAME=0.0.0.0 -e PORT=3000 -e NODE_ENV=production -e AGENT_RUNTIME=omnara
                 -e OMNARA_MODEL="${OMNARA_MODEL:-anthropic/claude-sonnet-5.5}" -e SITE_URL="$SITE")
           for k in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
                    OMNARA_TOKEN OMNARA_ORG_ID OMNARA_PROJECT_ID CONTEXT_DEV_API_KEY LOGOLINK_CLIENT_ID STRIPE_SECRET_KEY; do
             if [ -n "${!k}" ]; then args+=(-e "$k=${!k}"); else echo "::warning::$k secret not set; left out"; fi
           done
-          unikraft run --metro sfo --name "$INSTANCE" -m 1024M --set service="$SERVICE" "${args[@]}" --image "$IMAGE@$DIGEST"
-          echo "created=true" >> "$GITHUB_OUTPUT"
+          [ -n "$AGENT_DAILY_BUDGET" ] && args+=(-e "AGENT_DAILY_BUDGET=$AGENT_DAILY_BUDGET")
 
-      # Image edits only apply to a stopped instance. If the edit fails, it starts again on the old image.
-      - name: Swap the live image
-        if: steps.create.outputs.created != 'true'
-        run: |
-          unikraft instances stop "$INSTANCE"
-          trap 'unikraft instances start "$INSTANCE" || true' EXIT
-          unikraft instances edit "$INSTANCE" --image "$IMAGE@$DIGEST"
-          trap - EXIT
-          unikraft instances start "$INSTANCE"
+          if unikraft instances get "$INSTANCE" -o yaml | grep -E '^\s*(image|state):'; then
+            unikraft instances stop "$INSTANCE"
+            trap 'unikraft instances start "$INSTANCE" || true' EXIT
+            # -e replaces the instance's whole env with these values.
+            unikraft instances edit "$INSTANCE" --image "$IMAGE@$DIGEST" "${args[@]}"
+            trap - EXIT
+            unikraft instances start "$INSTANCE"
+          else
+            unikraft services get "$SERVICE" >/dev/null 2>&1 \
+              || unikraft services create --metro sfo --name "$SERVICE" --domain "$SERVICE" --service 443:3000/tls+http
+            unikraft run --metro sfo --name "$INSTANCE" -m 1024M --set service="$SERVICE" "${args[@]}" --image "$IMAGE@$DIGEST"
+          fi
           unikraft instances get "$INSTANCE" -o yaml | grep -E '^\s*(image|state):'
 
       - name: Check the live site

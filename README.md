@@ -60,12 +60,6 @@ pnpm agent https://example.com "book a demo"                # real agent run
 
 Every push to `main` deploys to Unikraft Cloud (`.github/workflows/deploy.yml`): it runs the tests, builds the image, swaps it onto the running instance and checks the site. Pull requests get tests and a production build first (`ci.yml`).
 
-The workflow needs the `UNIKRAFT_TOKEN` secret and the `UNIKRAFT_ORG`, `UNIKRAFT_INSTANCE` and `UNIKRAFT_SERVICE` variables (the service name sets the URL, `https://<service>.sfo.unikraft.app`). If the instance doesn't exist, the first run creates it, with env vars from repository secrets named as in `.env.example`.
+The workflow needs the `UNIKRAFT_TOKEN` secret and the `UNIKRAFT_ORG`, `UNIKRAFT_INSTANCE` and `UNIKRAFT_SERVICE` variables (the service name sets the URL, `https://<service>.sfo.unikraft.app`). If the instance doesn't exist, the first run creates it.
 
-Later deploys only change the image and keep the instance's env. To change an env var, stop the instance, edit it, then start it (edits only apply while it's stopped, and `--add` keeps the other vars):
-
-```bash
-unikraft instances stop agent-ready
-unikraft instances edit agent-ready --add runtime.env=KEY=value
-unikraft instances start agent-ready
-```
+The instance's env vars come from repository secrets named as in `.env.example`, and every deploy sets them again. To rotate a key, update the secret (`gh secret set CONTEXT_DEV_API_KEY`) and re-run the workflow from the Actions tab. The optional `AGENT_DAILY_BUDGET` variable sets how many new agent runs a day are allowed (default 50).
