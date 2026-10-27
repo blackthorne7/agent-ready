@@ -61,19 +61,10 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes progress-celebrate {
-  0% { opacity: 0; transform: translateY(-8px) rotate(0deg); }
-  25% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(180px) rotate(240deg); }
-}
-
 .progress-live-dot { animation: progress-pulse 1.8s ease-in-out infinite; }
 .progress-icon { animation: progress-pulse 2.2s ease-in-out infinite; }
 .progress-message { animation: progress-fade 420ms ease both; }
-.celebration-piece { position: absolute; top: 0; width: 7px; height: 12px; border-radius: 2px; background: var(--accent); animation: progress-celebrate 1.8s ease-out forwards; }
-.celebration-piece:nth-child(3n) { background: var(--good); }
-.celebration-piece:nth-child(3n + 1) { background: var(--warn); }
 
 @media (prefers-reduced-motion: reduce) {
-  .progress-live-dot, .progress-icon, .progress-message, .celebration-piece { animation: none; }
+  .progress-live-dot, .progress-icon, .progress-message { animation: none; }
 }
