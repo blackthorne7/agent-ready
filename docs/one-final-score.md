@@ -28,7 +28,7 @@ The rubric has an area ("Can AI finish tasks for customers?") that only the AI a
 ## Rules for changes
 
 - **Don't render a score before the final report.** Anything shown while waiting goes in `AgentEvaluationProgress`.
-- **Don't call `saveAudit` from the report page.** `/api/agent` is the only place the report flow saves.
+- **Don't call `saveAudit` from the report page, `/api/audit` or the MCP tools.** `/api/agent` is the only place a score is saved. The leaderboard shows each site's latest audit, so a checklist-only row saved elsewhere would replace the agent-tested score. `src/lib/audit-saving.test.ts` checks this.
 - **If the agent didn't run, say so.** The verdict card then says "AI task test didn't run…". Don't swap in a second number later.
 - **Fix link:** `/api/fix-link` builds the plan from the latest *saved* audit, so it only works after `/api/agent` has saved. The button only appears with the final report, so this holds.
 
@@ -38,7 +38,6 @@ A site that turns our checker away (bot wall, 403) gets **no score**: we only sc
 
 ## Still open
 
-- `/api/audit` and the MCP `audit_site` tool still save checklist-only scores. Leaderboard rows from those are partial scores. Decide whether they should save at all.
 - If the `/api/agent` HTTP request itself fails (timeout, network) or returns no score, the page falls back to the unsaved checklist score, labelled as checklist-only, and hides the fix link for that run.
 - The HTML report needs JavaScript (the browser starts the agent run). Clients without JS get a `<noscript>` pointer to `/api/audit`; `llms.txt` says so.
 - Going Back from the fix page re-runs the whole check (the report page isn't cached). Fix: after the final report arrives, put the audit id in the URL and serve the saved audit.

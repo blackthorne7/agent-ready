@@ -21,7 +21,7 @@ More on the problem and who it's for: [docs/problem-solution.md](docs/problem-so
 
 - **Web:** `/report?url=example.com`
 - **Leaderboard:** `/leaderboard`, filter by business type with `?type=restaurant`
-- **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }`
+- **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }` (the page checklist only, without the AI agent, and not added to the leaderboard)
 - **MCP server:** `/api/mcp` (streamable HTTP), tools `audit_site` and `generate_fixes`
 
 ```bash
