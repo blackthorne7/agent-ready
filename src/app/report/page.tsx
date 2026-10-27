@@ -8,12 +8,11 @@ import { AuditForm } from "../audit-form";
 import { BlockedReport } from "./blocked-report";
 import { SiteFooter, SiteHeader } from "../ui";
 import { ReportBody } from "./report-body";
-import { AgentEvaluationProgress } from "./AgentEvaluationProgress";
 
 export const dynamic = "force-dynamic";
 
 // checkout: the Stripe Checkout Session id Stripe adds when it sends the visitor back after paying.
-type Props = { searchParams: Promise<{ url?: string; demo?: string; checkout?: string }> };
+type Props = { searchParams: Promise<{ url?: string; checkout?: string }> };
 
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const { url } = await searchParams;
@@ -21,18 +20,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 }
 
 export default async function ReportPage({ searchParams }: Props) {
-  const { url, demo, checkout } = await searchParams;
-  if (demo === "1") {
-    return (
-      <div className="text-[17px] leading-[1.55]">
-        <SiteHeader />
-        <main className="mx-auto flex max-w-[1040px] flex-col gap-10 px-6 py-12">
-          <AgentEvaluationProgress mode="demo" />
-        </main>
-        <SiteFooter />
-      </div>
-    );
-  }
+  const { url, checkout } = await searchParams;
   // Checklist only, and not saved: ReportBody waits for the agent's final score, which /api/agent saves.
   const limited = url ? !takeAudit(await headers()) : false;
   const report = url && !limited ? await runAudit(url) : null;

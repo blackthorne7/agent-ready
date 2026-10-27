@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Report } from "@/lib/audit/types";
-import type { AgentTaskRun } from "../../../lib/agent/tasks";
+import type { AgentTaskRun } from "@/lib/agent/tasks";
 import { TONE, type Tone } from "../ui";
 
 export const AGENT_STATUS: Record<AgentTaskRun["result"]["status"], { tone: Tone; label: string }> = {

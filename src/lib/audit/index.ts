@@ -59,7 +59,7 @@ export async function runCheck(c: Check, ctx: AuditContext): Promise<CheckResult
 }
 
 export interface AuditOptions {
-  /** Agent task runs (from lib/agent) that feed the task checks in categories C and E. */
+  /** Agent task runs (from src/lib/agent) that feed the task checks in categories C and E. */
   tasks?: TaskRun[];
 }
 

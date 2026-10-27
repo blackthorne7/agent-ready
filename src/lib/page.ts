@@ -1,9 +1,9 @@
-// Page utilities used by the agent's tools (lib/agent/tools.ts).
+// Page utilities used by the agent's tools (src/lib/agent/tools.ts).
 // Real fetching goes through safeFetch (src/lib/audit/fetch.ts), which blocks private
-// networks and caps redirects and response size. AGENT_FAKE_SITE=1 serves lib/page-fake.ts instead.
+// networks and caps redirects and response size. AGENT_FAKE_SITE=1 serves src/lib/page-fake.ts instead.
 
 import * as cheerio from "cheerio";
-import { safeFetch } from "../src/lib/audit/fetch";
+import { safeFetch } from "./audit/fetch";
 import * as fake from "./page-fake";
 import type { FetchResult } from "./types";
 

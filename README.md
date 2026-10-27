@@ -21,7 +21,7 @@ More on the problem and who it's for: [docs/problem-solution.md](docs/problem-so
 
 - **Web:** `/report?url=example.com`
 - **Leaderboard:** `/leaderboard`, filter by business type with `?type=restaurant`
-- **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }`
+- **JSON API:** `GET /api/audit?url=example.com` or `POST /api/audit` with `{ "url": "..." }` (the page checklist only, without the AI agent, and not added to the leaderboard)
 - **MCP server:** `/api/mcp` (streamable HTTP), tools `audit_site` and `generate_fixes`
 
 ```bash
@@ -40,14 +40,14 @@ cp .env.example .env   # fill in the keys you have
 pnpm dev               # http://localhost:3000
 ```
 
-Every key is optional; the app degrades instead of failing. Without Supabase nothing is saved, without the Omnara vars the agent step fails, without Context.dev there are no logos and categories fall back to keywords, and without Stripe fix links are free. For Supabase, run `supabase/schema.sql` and `lib/agent/schema.sql` in your project's SQL editor.
+Every key is optional; the app degrades instead of failing. Without Supabase nothing is saved, without the Omnara vars the agent step fails, without Context.dev there are no logos and categories fall back to keywords, and without Stripe fix links are free. For Supabase, run `supabase/schema.sql` and `src/lib/agent/schema.sql` in your project's SQL editor.
 
 ## Code map
 
 - **Checks:** `src/lib/audit/checks.ts`, one entry per line of `evals/AGENT_CHECKS.md`. Each is a `{ id, category, title, weight, method, run(ctx) }` object, so adding one is a single array entry.
 - **Scoring:** `src/lib/audit/rubric.ts`. Checks are rated 0–4, `na` or `unknown` (unknown lowers coverage, never the score). Categories A–F are weighted 15/20/25/15/15/10, and a category counts once 25% of it is measured.
 - **Blocked sites:** `src/lib/audit/blocked.ts` detects the bot wall and writes the unblock steps.
-- **Agent:** `lib/agent/`. With `AGENT_RUNTIME=omnara`, Omnara runs the loop and model and our tools (`lib/agent/tools.ts`) run as custom tools on our server; otherwise `lib/agent/model.ts` calls Claude directly (`ANTHROPIC_API_KEY`). Guardrails are in `lib/agent/guard.ts`.
+- **Agent:** `src/lib/agent/`. With `AGENT_RUNTIME=omnara`, Omnara runs the loop and model and our tools (`src/lib/agent/tools.ts`) run as custom tools on our server; otherwise `src/lib/agent/model.ts` calls Claude directly (`ANTHROPIC_API_KEY`). Guardrails are in `src/lib/agent/guard.ts`.
 - **Pages and API:** `src/app/` (report, leaderboard, `/api/agent`, `/api/audit`, `/api/mcp`).
 
 ```bash

@@ -1,4 +1,4 @@
-// Same text as agent/PROMPT.md. {max_steps} is filled in at run time.
+// The agent's system prompt. {max_steps} is filled in at run time.
 const SYSTEM_PROMPT = `You are an AI agent auditing how well a website supports autonomous agents.
 You are given a starting URL and a task a user wants an agent to complete
 on that site (for example: "find pricing", "book a demo", "sign up").

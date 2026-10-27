@@ -3,6 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { runAudit } from "./audit";
+import { PaymentError } from "./payments";
 import type { CheckResult } from "./audit/types";
 import { adminDb } from "./supabase";
 
@@ -35,6 +36,6 @@ export async function currentReportFingerprint(siteUrl: string): Promise<string>
   if (!db) return fingerprintChecks((await runAudit(siteUrl)).checks);
   const { data, error } = await db.from("audits").select("checks").eq("url", siteUrl).order("audited_at", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("No saved report for this site yet. Run the check first.");
+  if (!data) throw new PaymentError("No saved report for this site yet. Run the check first.", 404);
   return fingerprintChecks(data.checks as CheckResult[]);
 }

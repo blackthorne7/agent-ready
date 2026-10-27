@@ -2,7 +2,6 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { normalizeUrl, runAudit } from "@/lib/audit";
 import { generateFixes } from "@/lib/audit/fixes";
-import { saveAudit } from "@/lib/audit/save";
 import { getBrand } from "@/lib/context-dev";
 import { AUDIT_LIMIT_MESSAGE, takeAudit } from "@/lib/limits";
 
@@ -15,12 +14,12 @@ const handler = createMcpHandler(
       {
         title: "Audit a website for agent readiness",
         description:
-          "Scores how agent-friendly a website is on six categories (A discoverability, B controls, C tasks, D programmatic access, E robustness, F safety), including cookie/consent/session checks. Returns a 0-100 score, coverage (share of checks actually measured), per-check 0-4 ratings with evidence and fixes. Blocked sites get no score.",
+          "Scores how agent-friendly a website is on six categories (A discoverability, B controls, C tasks, D programmatic access, E robustness, F safety), including cookie/consent/session checks. Returns a 0-100 score, coverage (share of checks actually measured), per-check 0-4 ratings with evidence and fixes. Blocked sites get no score. The score is from the page checklist only (the AI agent's task test is not run), and the result is not added to the leaderboard.",
         inputSchema: z.object({ url: z.string().describe("Website URL or domain, e.g. https://example.com") }),
       },
       async ({ url }) => {
+        // Not saved: a checklist-only score would replace the site's final, agent-tested one on the leaderboard.
         const report = await runAudit(url);
-        await saveAudit(report);
         return {
           content: [{ type: "text", text: JSON.stringify(report, null, 2) }],
           structuredContent: report as unknown as Record<string, unknown>,

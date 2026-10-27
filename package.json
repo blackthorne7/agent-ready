@@ -7,8 +7,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "agent": "tsx lib/agent/cli.ts",
-    "evaluate": "tsx lib/agent/evaluate.ts",
+    "agent": "tsx src/lib/agent/cli.ts",
+    "evaluate": "tsx src/lib/agent/evaluate.ts",
     "test": "tsx --test src/lib/*.test.ts src/lib/audit/*.test.ts"
   },
   "dependencies": {

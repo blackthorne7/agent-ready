@@ -4,10 +4,10 @@ import { useState } from "react";
 // Import from fix-plan/types directly: "@/lib/audit" pulls in server-only fetch code.
 import { rankFixes, type FixItem } from "@/lib/audit/fix-plan";
 import type { CheckResult, Report } from "@/lib/audit/types";
-import type { AgentTaskRun } from "../../../lib/agent/tasks";
+import type { AgentTaskRun } from "@/lib/agent/tasks";
 import { SiteLogo } from "../site-logo";
 import { ScoreRing, TONE, toneFor, type Tone } from "../ui";
-import { AgentEvaluationProgress, type EvaluationStage } from "./AgentEvaluationProgress";
+import { AgentEvaluationProgress } from "./AgentEvaluationProgress";
 import { AgentStrip, useAgentRun } from "./agent-section";
 import { FixLinkBanner, FixLinkRepeat, useFixLink, type Payment } from "./fix-link-button";
 import { AREAS, TASK_CHECK, TASK_STUCK, goodFor, todoFor, whyFor } from "./plain";
@@ -15,14 +15,6 @@ import { AREAS, TASK_CHECK, TASK_STUCK, goodFor, todoFor, whyFor } from "./plain
 const TOP_FIXES = 3;
 
 // By the time ReportBody mounts, the checklist has run; the agent is what's left.
-const AGENT_STAGES: EvaluationStage[] = [
-  { id: "connecting", title: "Connecting", status: "complete" },
-  { id: "connection", title: "Checking connection", status: "complete" },
-  { id: "preparing", title: "Preparing tests", status: "complete" },
-  { id: "running", title: "AI agent trying your site", status: "active" },
-  { id: "scoring", title: "Calculating scores", status: "pending" },
-  { id: "report", title: "Generating report", status: "pending" },
-];
 const WORKING_SHOWN = 9;
 
 const AREA_WORD: Record<Tone, string> = { good: "Yes", warn: "Mostly", bad: "Not yet" };
@@ -99,7 +91,7 @@ export function ReportBody({
   const agent = useAgentRun(checklistReport.url, (r) => r.score != null && setFinalReport(r as Report & { score: number }));
   // The fix link reads the saved final audit, which is stored under the final report's URL.
   const fixLink = useFixLink(finalReport?.url ?? checklistReport.url, payment);
-  if (agent.kind === "loading") return <AgentEvaluationProgress mode="live" stages={AGENT_STAGES} />;
+  if (agent.kind === "loading") return <AgentEvaluationProgress stage="agent" />;
 
   // The checklist-only report is a fallback for when the /api/agent request itself fails.
   const report = finalReport ?? checklistReport;
