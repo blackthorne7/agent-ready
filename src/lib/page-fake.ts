@@ -1,4 +1,4 @@
-// Fake website for tests (AGENT_FAKE_SITE=1). lib/page.ts delegates here.
+// Fake website for tests (AGENT_FAKE_SITE=1). src/lib/page.ts delegates here.
 // Paths on any host:
 //   /            homepage with nav + footer links
 //   /pricing     static pricing content
@@ -77,7 +77,7 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-export async function fetchPage(url: string, _opts?: FetchOptions): Promise<FetchResult> { // eslint-disable-line @typescript-eslint/no-unused-vars -- same signature as lib/page.ts
+export async function fetchPage(url: string, _opts?: FetchOptions): Promise<FetchResult> { // eslint-disable-line @typescript-eslint/no-unused-vars -- same signature as src/lib/page.ts
   await new Promise((r) => setTimeout(r, 150));
   const u = new URL(url);
 

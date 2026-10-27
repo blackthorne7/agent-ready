@@ -6,10 +6,10 @@
 // reports/<host>-<time>.json and (if configured) Supabase audit_reports.
 //
 // Tasks are AGENT_TASKS (./tasks), the same ones the report page runs.
-// AGENT_FAKE_SITE=1 points the agent at lib/page-fake.ts instead of the real site.
+// AGENT_FAKE_SITE=1 points the agent at src/lib/page-fake.ts instead of the real site.
 
 import { mkdir, writeFile } from "node:fs/promises";
-import { CATEGORY_ORDER, runAudit, type TaskRun } from "../../src/lib/audit";
+import { CATEGORY_ORDER, runAudit, type TaskRun } from "../audit";
 import { saveReport } from "./persist";
 import { runAgent } from "./run";
 import { AGENT_MAX_STEPS, AGENT_TASKS, toTaskRun } from "./tasks";

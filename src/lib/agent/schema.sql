@@ -1,5 +1,5 @@
 -- Agent run persistence. Run in the Supabase SQL editor.
--- Columns mirror AgentResult / AgentStep in lib/types.ts (snake_case).
+-- Columns mirror AgentResult / AgentStep in src/lib/types.ts (snake_case).
 
 create table if not exists agent_runs (
   run_id        uuid primary key,

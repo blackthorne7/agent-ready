@@ -4,7 +4,7 @@ import { useState } from "react";
 // Import from fix-plan/types directly: "@/lib/audit" pulls in server-only fetch code.
 import { rankFixes, type FixItem } from "@/lib/audit/fix-plan";
 import type { CheckResult, Report } from "@/lib/audit/types";
-import type { AgentTaskRun } from "../../../lib/agent/tasks";
+import type { AgentTaskRun } from "@/lib/agent/tasks";
 import { SiteLogo } from "../site-logo";
 import { ScoreRing, TONE, toneFor, type Tone } from "../ui";
 import { AgentEvaluationProgress } from "./AgentEvaluationProgress";

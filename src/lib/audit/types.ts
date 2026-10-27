@@ -31,7 +31,7 @@ export interface Fetched {
 
 export type TaskStatus = "success" | "failed" | "blocked" | "error";
 
-/** One agent attempt at a task, produced by lib/agent and fed into task checks. */
+/** One agent attempt at a task, produced by src/lib/agent and fed into task checks. */
 export interface TaskRun {
   taskId: string;
   /** Short name, e.g. "Find contact details". */

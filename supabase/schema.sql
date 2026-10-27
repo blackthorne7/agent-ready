@@ -1,5 +1,5 @@
 -- Agent Ready: data model for reports, fix links and the leaderboard.
--- Run in the Supabase SQL editor. Agent run tables live separately in lib/agent/schema.sql.
+-- Run in the Supabase SQL editor. Agent run tables live separately in src/lib/agent/schema.sql.
 --
 --   business_types   lookup: restaurant, auto shop, salon, ...
 --   businesses       one row per website (domain), with type and location

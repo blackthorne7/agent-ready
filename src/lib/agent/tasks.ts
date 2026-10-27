@@ -1,7 +1,7 @@
 // The tasks the agent attempts on every audited site, run in parallel.
 // Kept generic so they apply to SaaS, shops, restaurants and local businesses alike.
 
-import type { TaskRun } from "../../src/lib/audit/types";
+import type { TaskRun } from "../audit/types";
 import type { AgentResult, AgentStep } from "../types";
 import { runAgent } from "./run";
 

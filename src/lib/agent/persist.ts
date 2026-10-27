@@ -1,9 +1,9 @@
 // Supabase persistence for agent runs. Never throws: failures are logged and the run continues.
 // Env: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL) and SUPABASE_SERVICE_ROLE_KEY. Missing env = skip.
-// Table definitions: lib/agent/schema.sql
+// Table definitions: src/lib/agent/schema.sql
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Report } from "../../src/lib/audit";
+import type { Report } from "../audit";
 import type { AgentResult, AgentStep } from "../types";
 
 let client: SupabaseClient | null | undefined;

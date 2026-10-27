@@ -5,7 +5,7 @@ import { assertPublicUrl } from "@/lib/audit/fetch";
 import { saveAudit } from "@/lib/audit/save";
 import { getBrand } from "@/lib/context-dev";
 import { DAY, HOUR, RateLimiter, TtlCache, clientIp } from "@/lib/limits";
-import { runAgentTasks, toTaskRun, type AgentTaskRun } from "../../../../lib/agent/tasks";
+import { runAgentTasks, toTaskRun, type AgentTaskRun } from "@/lib/agent/tasks";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,7 +28,7 @@ const overall = new RateLimiter(60, HOUR);
 const agentBudget = new RateLimiter(Number(process.env.AGENT_DAILY_BUDGET) || 50, DAY);
 
 /**
- * Runs the agent tasks (lib/agent/tasks.ts) against a site, then re-scores the site with their
+ * Runs the agent tasks (src/lib/agent/tasks.ts) against a site, then re-scores the site with their
  * results so the rubric's task-based checks count. Takes up to ~2 minutes.
  */
 export async function POST(req: Request) {
