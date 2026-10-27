@@ -77,7 +77,7 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-export async function fetchPage(url: string, _opts?: FetchOptions): Promise<FetchResult> {
+export async function fetchPage(url: string, _opts?: FetchOptions): Promise<FetchResult> { // eslint-disable-line @typescript-eslint/no-unused-vars -- same signature as lib/page.ts
   await new Promise((r) => setTimeout(r, 150));
   const u = new URL(url);
 
